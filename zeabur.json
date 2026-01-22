@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.zeabur.app/zeabur.json",
+  "build": {
+    "command": "npm install && npx puppeteer browsers install chrome"
+  },
+  "start": {
+    "command": "npm start"
+  }
+}
