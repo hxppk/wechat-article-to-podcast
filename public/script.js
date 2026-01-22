@@ -14,6 +14,9 @@ const playerSection = document.getElementById('player-section');
 const playerTitle = document.getElementById('player-title');
 const playerAccount = document.getElementById('player-account');
 const playBtn = document.getElementById('play-btn');
+const mobilePlayBtn = document.getElementById('mobile-play-btn');
+const prevBtn = document.getElementById('prev-btn');
+const nextBtn = document.getElementById('next-btn');
 const progressSlider = document.getElementById('progress-slider');
 const currentTimeEl = document.getElementById('current-time');
 const totalTimeEl = document.getElementById('total-time');
@@ -26,6 +29,7 @@ const playerVisualizer = document.querySelector('.player-visualizer');
 let currentTaskId = null;
 let pollInterval = null;
 let currentPodcastId = null;
+let podcastsList = []; // 保存播客列表用于上下曲切换
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -45,6 +49,9 @@ function setupEventListeners() {
 
   // 播放器控制
   playBtn.addEventListener('click', togglePlay);
+  mobilePlayBtn?.addEventListener('click', togglePlay);
+  prevBtn?.addEventListener('click', playPrevious);
+  nextBtn?.addEventListener('click', playNext);
   progressSlider.addEventListener('input', handleSeek);
   speedSelect.addEventListener('change', handleSpeedChange);
   downloadBtn.addEventListener('click', handleDownload);
@@ -65,11 +72,39 @@ function setupEventListeners() {
 
 // 更新播放按钮状态
 function updatePlayButtonState(isPlaying) {
+  // 更新主播放按钮
   const playIcon = playBtn.querySelector('.play-icon');
   const pauseIcon = playBtn.querySelector('.pause-icon');
   if (playIcon && pauseIcon) {
     playIcon.style.display = isPlaying ? 'none' : 'block';
     pauseIcon.style.display = isPlaying ? 'block' : 'none';
+  }
+  // 更新移动端播放按钮
+  if (mobilePlayBtn) {
+    const mobilePlayIcon = mobilePlayBtn.querySelector('.play-icon');
+    const mobilePauseIcon = mobilePlayBtn.querySelector('.pause-icon');
+    if (mobilePlayIcon && mobilePauseIcon) {
+      mobilePlayIcon.style.display = isPlaying ? 'none' : 'block';
+      mobilePauseIcon.style.display = isPlaying ? 'block' : 'none';
+    }
+  }
+}
+
+// 播放上一曲
+function playPrevious() {
+  if (!currentPodcastId || podcastsList.length === 0) return;
+  const currentIndex = podcastsList.findIndex(p => p.id === currentPodcastId);
+  if (currentIndex > 0) {
+    playPodcast(podcastsList[currentIndex - 1].id);
+  }
+}
+
+// 播放下一曲
+function playNext() {
+  if (!currentPodcastId || podcastsList.length === 0) return;
+  const currentIndex = podcastsList.findIndex(p => p.id === currentPodcastId);
+  if (currentIndex < podcastsList.length - 1) {
+    playPodcast(podcastsList[currentIndex + 1].id);
   }
 }
 
@@ -231,6 +266,7 @@ async function loadPodcasts() {
     const response = await fetch('/api/podcasts');
     const data = await response.json();
     const podcasts = data.podcasts || data; // 兼容两种格式
+    podcastsList = podcasts || []; // 保存到全局变量用于上下曲切换
 
     // 更新播客数量
     if (podcastCount) {

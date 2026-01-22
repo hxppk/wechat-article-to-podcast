@@ -100,6 +100,7 @@
       <input type="range" id="progress-slider" class="player-progress" value="0" min="0" max="100">
     </div>
     <div class="player-content">
+      <!-- Left: Track Info -->
       <div class="player-info">
         <div class="player-visualizer">
           <span class="bar bar1"></span>
@@ -111,7 +112,14 @@
           <p id="player-meta"><span id="player-account"></span> • <span id="current-time">0:00</span> / <span id="total-time">0:00</span></p>
         </div>
       </div>
+      <!-- Center: Controls (Desktop) -->
       <div class="player-controls">
+        <button class="skip-btn" id="prev-btn" title="上一曲">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <polygon points="19 20 9 12 19 4 19 20"></polygon>
+            <rect x="5" y="4" width="2" height="16"></rect>
+          </svg>
+        </button>
         <button id="play-btn" class="play-btn">
           <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
             <polygon points="6 3 20 12 6 21 6 3"></polygon>
@@ -121,7 +129,14 @@
             <rect x="14" y="4" width="4" height="16"></rect>
           </svg>
         </button>
+        <button class="skip-btn" id="next-btn" title="下一曲">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+            <polygon points="5 4 15 12 5 20 5 4"></polygon>
+            <rect x="17" y="4" width="2" height="16"></rect>
+          </svg>
+        </button>
       </div>
+      <!-- Right: Actions -->
       <div class="player-actions">
         <select id="speed-select" class="speed-select">
           <option value="0.5">0.5x</option>
@@ -136,6 +151,16 @@
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
             <polyline points="7 10 12 15 17 10"></polyline>
             <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        </button>
+        <!-- Mobile Play Button -->
+        <button id="mobile-play-btn" class="play-btn mobile-play-btn">
+          <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="6 3 20 12 6 21 6 3"></polygon>
+          </svg>
+          <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
           </svg>
         </button>
       </div>
