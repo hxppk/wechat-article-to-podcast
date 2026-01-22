@@ -1,0 +1,37 @@
+{
+  "name": "wechat-article-to-podcast",
+  "version": "1.0.0",
+  "description": "将微信公众号文章转换为双人对话播客",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "wechat",
+    "podcast",
+    "tts",
+    "ai",
+    "gemini",
+    "text-to-speech"
+  ],
+  "author": "hxppk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hxppk/wechat-article-to-podcast.git"
+  },
+  "dependencies": {
+    "@google/genai": "^1.38.0",
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "global-agent": "^3.0.0",
+    "puppeteer": "^24.35.0",
+    "undici": "^7.18.2",
+    "uuid": "^9.0.0"
+  }
+}

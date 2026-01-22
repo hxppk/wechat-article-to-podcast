@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>微信文章转播客</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>微信文章转播客</h1>
+      <p class="subtitle">输入公众号文章链接，一键生成双人对话播客</p>
+    </header>
+
+    <!-- 输入区域 -->
+    <section class="input-section">
+      <div class="input-group">
+        <input
+          type="url"
+          id="article-url"
+          placeholder="粘贴微信公众号文章链接，如 https://mp.weixin.qq.com/s/..."
+          autocomplete="off"
+        >
+        <button id="convert-btn">转换</button>
+      </div>
+      <p class="hint">支持微信公众号文章链接</p>
+    </section>
+
+    <!-- 状态区域 -->
+    <section class="status-section" id="status-section" style="display: none;">
+      <div class="status-card">
+        <div class="status-icon">
+          <div class="spinner"></div>
+        </div>
+        <div class="status-info">
+          <p class="status-text" id="status-text">处理中...</p>
+          <p class="status-eta" id="status-eta"></p>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+    </section>
+
+    <!-- 错误提示 -->
+    <section class="error-section" id="error-section" style="display: none;">
+      <div class="error-card">
+        <p class="error-text" id="error-text"></p>
+        <button id="retry-btn">重试</button>
+      </div>
+    </section>
+
+    <!-- 播客列表 -->
+    <section class="podcast-section">
+      <h2>播客列表</h2>
+      <div class="podcast-list" id="podcast-list">
+        <p class="empty-hint">暂无播客，输入文章链接开始转换</p>
+      </div>
+    </section>
+
+    <!-- 播放器 -->
+    <section class="player-section" id="player-section" style="display: none;">
+      <div class="player-card">
+        <div class="player-info">
+          <p class="player-title" id="player-title">播放中</p>
+          <p class="player-account" id="player-account"></p>
+        </div>
+        <div class="player-controls">
+          <button class="play-btn" id="play-btn">▶</button>
+          <div class="progress-wrapper">
+            <input type="range" id="progress-slider" min="0" max="100" value="0">
+            <div class="time-display">
+              <span id="current-time">0:00</span>
+              <span>/</span>
+              <span id="total-time">0:00</span>
+            </div>
+          </div>
+          <select id="speed-select">
+            <option value="0.5">0.5x</option>
+            <option value="0.75">0.75x</option>
+            <option value="1" selected>1x</option>
+            <option value="1.25">1.25x</option>
+            <option value="1.5">1.5x</option>
+            <option value="2">2x</option>
+          </select>
+          <button class="download-btn" id="download-btn">下载</button>
+        </div>
+        <audio id="audio-player"></audio>
+      </div>
+    </section>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
