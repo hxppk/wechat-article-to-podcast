@@ -21,6 +21,10 @@
     "type": "git",
     "url": "git+https://github.com/hxppk/wechat-article-to-podcast.git"
   },
+  "bugs": {
+    "url": "https://github.com/hxppk/wechat-article-to-podcast/issues"
+  },
+  "homepage": "https://github.com/hxppk/wechat-article-to-podcast#readme",
   "dependencies": {
     "@google/genai": "^1.38.0",
     "@google/generative-ai": "^0.21.0",
