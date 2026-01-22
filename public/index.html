@@ -5,91 +5,142 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>微信文章转播客</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
+  <!-- Background -->
+  <div class="bg-overlay"></div>
+
   <div class="container">
-    <header>
-      <h1>微信文章转播客</h1>
-      <p class="subtitle">输入公众号文章链接，一键生成双人对话播客</p>
+    <!-- Header -->
+    <header class="header">
+      <div class="badge">
+        <span class="badge-dot"></span>
+        AI Audio Engine V2.0 Active
+      </div>
+      <h1>微信文章<span class="gradient-text">转播客</span></h1>
+      <p class="subtitle">输入公众号文章链接，一键生成双人对话播客，让阅读变成聆听。</p>
     </header>
 
-    <!-- 输入区域 -->
+    <!-- Input Section -->
     <section class="input-section">
-      <div class="input-group">
-        <input
-          type="url"
-          id="article-url"
-          placeholder="粘贴微信公众号文章链接，如 https://mp.weixin.qq.com/s/..."
-          autocomplete="off"
-        >
-        <button id="convert-btn">转换</button>
+      <div class="input-wrapper">
+        <div class="input-group">
+          <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+            <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+          </svg>
+          <input type="text" id="article-url" placeholder="粘贴微信公众号文章链接，如 https://mp.weixin.qq.com/s/...">
+        </div>
+        <button id="convert-btn" class="convert-btn">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"></path>
+          </svg>
+          <span>开始转换</span>
+        </button>
       </div>
-      <p class="hint">支持微信公众号文章链接</p>
+      <div class="input-hint">
+        <span class="hint-dot"></span>
+        支持微信公众号文章链接 (WeChat Official Accounts)
+      </div>
     </section>
 
-    <!-- 状态区域 -->
-    <section class="status-section" id="status-section" style="display: none;">
+    <!-- Status Section -->
+    <section id="status-section" class="status-section" style="display: none;">
       <div class="status-card">
-        <div class="status-icon">
-          <div class="spinner"></div>
-        </div>
+        <div class="status-spinner"></div>
         <div class="status-info">
-          <p class="status-text" id="status-text">处理中...</p>
-          <p class="status-eta" id="status-eta"></p>
+          <p id="status-text" class="status-text">正在处理...</p>
+          <p id="status-eta" class="status-eta"></p>
         </div>
       </div>
       <div class="progress-bar">
-        <div class="progress-fill" id="progress-fill"></div>
+        <div id="progress-fill" class="progress-fill"></div>
       </div>
     </section>
 
-    <!-- 错误提示 -->
-    <section class="error-section" id="error-section" style="display: none;">
+    <!-- Error Section -->
+    <section id="error-section" class="error-section" style="display: none;">
       <div class="error-card">
-        <p class="error-text" id="error-text"></p>
-        <button id="retry-btn">重试</button>
+        <svg class="error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <p id="error-text" class="error-text"></p>
+        <button id="retry-btn" class="retry-btn">重试</button>
       </div>
     </section>
 
-    <!-- 播客列表 -->
+    <!-- Podcast List -->
     <section class="podcast-section">
-      <h2>播客列表</h2>
-      <div class="podcast-list" id="podcast-list">
-        <p class="empty-hint">暂无播客，输入文章链接开始转换</p>
+      <div class="section-header">
+        <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+          <line x1="12" y1="19" x2="12" y2="22"></line>
+        </svg>
+        <h2>播客列表</h2>
+        <span id="podcast-count" class="podcast-count">0</span>
       </div>
-    </section>
-
-    <!-- 播放器 -->
-    <section class="player-section" id="player-section" style="display: none;">
-      <div class="player-card">
-        <div class="player-info">
-          <p class="player-title" id="player-title">播放中</p>
-          <p class="player-account" id="player-account"></p>
+      <div id="podcast-list" class="podcast-list">
+        <div class="empty-hint">
+          <p>暂无播客，快去转换第一篇文章吧！</p>
         </div>
-        <div class="player-controls">
-          <button class="play-btn" id="play-btn">▶</button>
-          <div class="progress-wrapper">
-            <input type="range" id="progress-slider" min="0" max="100" value="0">
-            <div class="time-display">
-              <span id="current-time">0:00</span>
-              <span>/</span>
-              <span id="total-time">0:00</span>
-            </div>
-          </div>
-          <select id="speed-select">
-            <option value="0.5">0.5x</option>
-            <option value="0.75">0.75x</option>
-            <option value="1" selected>1x</option>
-            <option value="1.25">1.25x</option>
-            <option value="1.5">1.5x</option>
-            <option value="2">2x</option>
-          </select>
-          <button class="download-btn" id="download-btn">下载</button>
-        </div>
-        <audio id="audio-player"></audio>
       </div>
     </section>
   </div>
+
+  <!-- Player Section -->
+  <section id="player-section" class="player-section" style="display: none;">
+    <div class="player-progress-wrapper">
+      <input type="range" id="progress-slider" class="player-progress" value="0" min="0" max="100">
+    </div>
+    <div class="player-content">
+      <div class="player-info">
+        <div class="player-visualizer">
+          <span class="bar bar1"></span>
+          <span class="bar bar2"></span>
+          <span class="bar bar3"></span>
+        </div>
+        <div class="player-text">
+          <h4 id="player-title"></h4>
+          <p id="player-meta"><span id="player-account"></span> • <span id="current-time">0:00</span> / <span id="total-time">0:00</span></p>
+        </div>
+      </div>
+      <div class="player-controls">
+        <button id="play-btn" class="play-btn">
+          <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
+            <polygon points="6 3 20 12 6 21 6 3"></polygon>
+          </svg>
+          <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+        </button>
+      </div>
+      <div class="player-actions">
+        <select id="speed-select" class="speed-select">
+          <option value="0.5">0.5x</option>
+          <option value="0.75">0.75x</option>
+          <option value="1" selected>1x</option>
+          <option value="1.25">1.25x</option>
+          <option value="1.5">1.5x</option>
+          <option value="2">2x</option>
+        </select>
+        <button id="download-btn" class="download-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <audio id="audio-player"></audio>
+  </section>
 
   <script src="script.js"></script>
 </body>
