@@ -17,17 +17,41 @@ if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
 // 多角色声音配置 - 映射到 MultiSpeakerVoiceConfig 的 speaker name
 const SPEAKER_VOICE_MAP = {
   // 新格式：直接使用 Speaker_A/Speaker_B
-  'Speaker_A': { speakerName: 'Speaker_A', voiceName: 'Achird' },      // 老王
+  'Speaker_A': { speakerName: 'Speaker_A', voiceName: 'Fenrir' },      // 老王
   'Speaker_B': { speakerName: 'Speaker_B', voiceName: 'Callirrhoe' },  // 小李
   // 兼容中文角色名
-  '老王': { speakerName: 'Speaker_A', voiceName: 'Achird' },
+  '老王': { speakerName: 'Speaker_A', voiceName: 'Fenrir' },
   '小李': { speakerName: 'Speaker_B', voiceName: 'Callirrhoe' },
   '小墨': { speakerName: 'Speaker_A', voiceName: 'Achird' },
   '小夏': { speakerName: 'Speaker_B', voiceName: 'Callirrhoe' },
   // 兼容旧 JSON 格式
-  'A': { speakerName: 'Speaker_A', voiceName: 'Achird' },
+  'A': { speakerName: 'Speaker_A', voiceName: 'Fenrir' },
   'B': { speakerName: 'Speaker_B', voiceName: 'Callirrhoe' }
 };
+
+// 默认风格提示词：用于引导整体播客语气与互动节奏
+const DEFAULT_STYLE_PROMPT = `
+Create a realistic, conversational podcast in Mandarin Chinese.
+
+1. Speaker_A (老王 - The Veteran):
+   - Voice Identity: Male, deep, resonant. **Age: approx. 50 years old.**
+   - Audio Quality: **Crystal clear studio recording, high fidelity, NO background static.**
+   - Tone: Calm, steady, authoritative but relaxed.
+   - Pacing: Thoughtful, slightly slower than Speaker B.
+   - Note: Make the voice sound experienced but clean, not raspy.
+
+2. Speaker_B (小李 - The Rookie):
+   - Voice Identity: Female, clear, articulate, and engaging. **Age: approx. 28 years old.**
+   - Tone: Curious, bright, but professional.
+   - Interaction: Reacts quickly, asks questions with genuine interest.
+   - Note: Callirrhoe usually sounds calm, so inject some energy and curiosity into her tone.
+
+3. Environment:
+   - **Soundproof Podcasting Studio.** (Professional recording environment)
+   - Zero ambient noise, zero music.
+
+4. Language: Mandarin Chinese (Colloquial & Natural).
+`;
 
 // 重试配置 - 增加延迟应对限流
 const RETRY_CONFIG = {
@@ -59,14 +83,26 @@ class GeminiTTS extends TTSProvider {
   /**
    * 将对话数组转换为多角色文本格式
    * @param {Array<{speaker: string, text: string}>} dialogues
+   * @param {string} stylePrompt
    * @returns {{text: string, speakers: Array<{speaker: string, voiceName: string}>}}
    */
-  convertToMultiSpeakerFormat(dialogues) {
+  convertToMultiSpeakerFormat(dialogues, stylePrompt = '') {
     const usedSpeakers = new Map(); // 记录使用的角色 -> speakerName
     const lines = [];
 
+    if (stylePrompt) {
+      lines.push(stylePrompt.trim());
+      lines.push('');
+    }
+
     for (const dialogue of dialogues) {
-      const config = SPEAKER_VOICE_MAP[dialogue.speaker] || SPEAKER_VOICE_MAP['A'];
+      const rawSpeaker = typeof dialogue.speaker === 'string' ? dialogue.speaker.trim() : '';
+      const normalizedSpeaker = rawSpeaker
+        .replace(/^speaker_/i, 'Speaker_')
+        .replace(/^Speaker_([ab])$/i, (_, letter) => `Speaker_${letter.toUpperCase()}`);
+      const config = SPEAKER_VOICE_MAP[normalizedSpeaker] ||
+        SPEAKER_VOICE_MAP[rawSpeaker] ||
+        SPEAKER_VOICE_MAP['A'];
       const speakerName = config.speakerName;
 
       // 记录使用的角色
@@ -165,8 +201,9 @@ class GeminiTTS extends TTSProvider {
    * 合成完整播客 - 使用多角色一次性生成
    * @param {Array<{speaker: string, text: string}>} dialogues
    * @param {string} outputPath
+   * @param {{stylePrompt?: string}} options
    */
-  async synthesize(dialogues, outputPath) {
+  async synthesize(dialogues, outputPath, options = {}) {
     if (!Array.isArray(dialogues) || dialogues.length === 0) {
       throw new Error('对话数据无效');
     }
@@ -174,7 +211,8 @@ class GeminiTTS extends TTSProvider {
     console.log(`开始合成 ${dialogues.length} 段对话（多角色一次性生成）...`);
 
     // 转换为多角色格式
-    const { text, speakers } = this.convertToMultiSpeakerFormat(dialogues);
+    const stylePrompt = options.stylePrompt || DEFAULT_STYLE_PROMPT;
+    const { text, speakers } = this.convertToMultiSpeakerFormat(dialogues, stylePrompt);
 
     console.log(`角色配置: ${speakers.map(s => `${s.speaker}=${s.voiceName}`).join(', ')}`);
     console.log(`文本长度: ${text.length} 字符`);
