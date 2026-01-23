@@ -105,6 +105,7 @@ npm start
 | `HTTPS_PROXY` | 否 | HTTPS 代理地址 |
 | `PORT` | 否 | 服务端口，默认 3000 |
 | `MAX_CONCURRENT_TASKS` | 否 | 最大并发任务数，默认 3 |
+| `ENABLE_FILE_CLEANUP` | 否 | 设为 `true` 启用自动清理（1小时过期），默认禁用 |
 
 ### 音色配置
 

@@ -56,38 +56,44 @@ app.get('/health', (req, res) => {
 });
 
 // 文件清理定时任务（1 小时过期）
-setInterval(() => {
-  const now = Date.now();
-  const maxAge = 60 * 60 * 1000; // 1 小时
+// 默认禁用，设置 ENABLE_FILE_CLEANUP=true 启用
+if (process.env.ENABLE_FILE_CLEANUP === 'true') {
+  console.log('文件清理任务已启用（1小时过期）');
+  setInterval(() => {
+    const now = Date.now();
+    const maxAge = 60 * 60 * 1000; // 1 小时
 
-  // 清理音频文件
-  if (fs.existsSync(audioDir)) {
-    fs.readdirSync(audioDir).forEach(file => {
-      const filePath = path.join(audioDir, file);
-      try {
-        const stats = fs.statSync(filePath);
-        if (now - stats.mtimeMs > maxAge) {
-          fs.unlinkSync(filePath);
-          console.log('已清理过期音频:', file);
-        }
-      } catch (e) { /* ignore */ }
-    });
-  }
+    // 清理音频文件
+    if (fs.existsSync(audioDir)) {
+      fs.readdirSync(audioDir).forEach(file => {
+        const filePath = path.join(audioDir, file);
+        try {
+          const stats = fs.statSync(filePath);
+          if (now - stats.mtimeMs > maxAge) {
+            fs.unlinkSync(filePath);
+            console.log('已清理过期音频:', file);
+          }
+        } catch (e) { /* ignore */ }
+      });
+    }
 
-  // 清理脚本文件
-  if (fs.existsSync(scriptsDir)) {
-    fs.readdirSync(scriptsDir).forEach(file => {
-      const filePath = path.join(scriptsDir, file);
-      try {
-        const stats = fs.statSync(filePath);
-        if (now - stats.mtimeMs > maxAge) {
-          fs.unlinkSync(filePath);
-          console.log('已清理过期脚本:', file);
-        }
-      } catch (e) { /* ignore */ }
-    });
-  }
-}, 30 * 60 * 1000); // 每 30 分钟检查一次
+    // 清理脚本文件
+    if (fs.existsSync(scriptsDir)) {
+      fs.readdirSync(scriptsDir).forEach(file => {
+        const filePath = path.join(scriptsDir, file);
+        try {
+          const stats = fs.statSync(filePath);
+          if (now - stats.mtimeMs > maxAge) {
+            fs.unlinkSync(filePath);
+            console.log('已清理过期脚本:', file);
+          }
+        } catch (e) { /* ignore */ }
+      });
+    }
+  }, 30 * 60 * 1000); // 每 30 分钟检查一次
+} else {
+  console.log('文件清理任务已禁用（播客将永久保留）');
+}
 
 // 启动服务
 app.listen(PORT, () => {
