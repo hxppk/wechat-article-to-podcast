@@ -25,16 +25,39 @@ const downloadBtn = document.getElementById('download-btn');
 const audioPlayer = document.getElementById('audio-player');
 const playerVisualizer = document.querySelector('.player-visualizer');
 
+// 详情页 DOM 元素
+const detailOverlay = document.getElementById('detail-overlay');
+const detailDrawer = document.getElementById('detail-drawer');
+const detailCloseBtn = document.getElementById('detail-close-btn');
+const detailShareBtn = document.getElementById('detail-share-btn');
+const detailTitle = document.getElementById('detail-title');
+const detailAccount = document.getElementById('detail-account');
+const detailDescription = document.getElementById('detail-description');
+const detailSourceBtn = document.getElementById('detail-source-btn');
+const detailSpeedBtn = document.getElementById('detail-speed-btn');
+const detailSpeedText = document.getElementById('detail-speed-text');
+const detailSpeedMenu = document.getElementById('detail-speed-menu');
+const detailCurrentTime = document.getElementById('detail-current-time');
+const detailTotalTime = document.getElementById('detail-total-time');
+const detailProgress = document.getElementById('detail-progress');
+const detailPlayBtn = document.getElementById('detail-play-btn');
+const detailBackwardBtn = document.getElementById('detail-backward-btn');
+const detailForwardBtn = document.getElementById('detail-forward-btn');
+const toastEl = document.getElementById('toast');
+
 // 状态
 let currentTaskId = null;
 let pollInterval = null;
 let currentPodcastId = null;
 let podcastsList = []; // 保存播客列表用于上下曲切换
+let currentPodcastData = null; // 当前播客完整数据
+let isDetailOpen = false; // 详情页是否打开
 
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
   loadPodcasts();
   setupEventListeners();
+  handleShareLink();
 });
 
 // 事件监听
@@ -68,6 +91,70 @@ function setupEventListeners() {
     updatePlayButtonState(false);
     playerVisualizer?.classList.remove('playing');
   });
+
+  // 详情页事件
+  detailCloseBtn?.addEventListener('click', closeDetail);
+  detailOverlay?.addEventListener('click', closeDetail);
+  detailShareBtn?.addEventListener('click', handleShare);
+  detailSourceBtn?.addEventListener('click', handleViewSource);
+  detailSpeedBtn?.addEventListener('click', toggleSpeedMenu);
+  detailPlayBtn?.addEventListener('click', togglePlay);
+  detailBackwardBtn?.addEventListener('click', () => seekRelative(-15));
+  detailForwardBtn?.addEventListener('click', () => seekRelative(30));
+  detailProgress?.addEventListener('input', handleDetailSeek);
+
+  // 倍速菜单选项
+  detailSpeedMenu?.querySelectorAll('button').forEach(btn => {
+    btn.addEventListener('click', () => handleDetailSpeedChange(parseFloat(btn.dataset.speed)));
+  });
+
+  // 点击播放器非控制区域打开详情页
+  playerSection?.addEventListener('click', (e) => {
+    if (shouldOpenDetailFromPlayer(e)) {
+      openDetail();
+    }
+  });
+
+  // 点击速度菜单外部关闭
+  document.addEventListener('click', (e) => {
+    if (detailSpeedMenu && !e.target.closest('.detail-speed-wrapper')) {
+      detailSpeedMenu.style.display = 'none';
+    }
+  });
+
+  // 手势支持：上滑打开详情页、下滑关闭
+  let touchStartY = 0;
+  let touchStartTime = 0;
+
+  playerSection?.addEventListener('touchstart', (e) => {
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  playerSection?.addEventListener('touchend', (e) => {
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaY = touchStartY - touchEndY;
+    const deltaTime = Date.now() - touchStartTime;
+    // 上滑超过 30px 且在 300ms 内
+    if (deltaY > 30 && deltaTime < 300 && !isDetailOpen) {
+      openDetail();
+    }
+  }, { passive: true });
+
+  detailDrawer?.addEventListener('touchstart', (e) => {
+    touchStartY = e.touches[0].clientY;
+    touchStartTime = Date.now();
+  }, { passive: true });
+
+  detailDrawer?.addEventListener('touchend', (e) => {
+    const touchEndY = e.changedTouches[0].clientY;
+    const deltaY = touchEndY - touchStartY;
+    const deltaTime = Date.now() - touchStartTime;
+    // 下滑超过 50px 且在 300ms 内
+    if (deltaY > 50 && deltaTime < 300) {
+      closeDetail();
+    }
+  }, { passive: true });
 }
 
 // 更新播放按钮状态
@@ -88,6 +175,8 @@ function updatePlayButtonState(isPlaying) {
       mobilePauseIcon.style.display = isPlaying ? 'block' : 'none';
     }
   }
+  // 更新详情页播放按钮
+  updateDetailPlayButtonState(isPlaying);
 }
 
 // 播放上一曲
@@ -375,6 +464,7 @@ async function playPodcast(id) {
     const podcast = data.podcast || data; // 兼容两种格式
 
     currentPodcastId = id;
+    currentPodcastData = podcast; // 保存完整播客数据
     playerTitle.textContent = podcast.sourceFileName || podcast.title;
     playerAccount.textContent = podcast.accountName || '微信公众号平台';
     audioPlayer.src = `/audio/${id}.mp3`;
@@ -411,11 +501,20 @@ function updateProgress() {
     const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
     progressSlider.value = progress;
     currentTimeEl.textContent = formatDuration(audioPlayer.currentTime * 1000);
+
+    // 同步详情页进度
+    if (isDetailOpen) {
+      syncDetailProgress();
+    }
   }
 }
 
 function updateDuration() {
   totalTimeEl.textContent = formatDuration(audioPlayer.duration * 1000);
+  // 同步详情页时长
+  if (detailTotalTime) {
+    detailTotalTime.textContent = formatDuration(audioPlayer.duration * 1000);
+  }
 }
 
 // 播放结束
@@ -428,6 +527,7 @@ function handleEnded() {
 // 倍速控制
 function handleSpeedChange() {
   audioPlayer.playbackRate = parseFloat(speedSelect.value);
+  syncDetailSpeedDisplay(speedSelect.value);
 }
 
 // 下载当前播放
@@ -507,4 +607,227 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// ==================== 详情页功能 ====================
+
+// 打开详情页
+function openDetail() {
+  if (!currentPodcastData) return;
+
+  // 填充详情页内容
+  detailTitle.textContent = currentPodcastData.sourceFileName || currentPodcastData.title || '';
+  detailAccount.textContent = currentPodcastData.accountName || '微信公众号平台';
+  detailDescription.textContent = currentPodcastData.summary || currentPodcastData.scriptPreview || '暂无简介';
+
+  // 更新原文按钮状态
+  if (currentPodcastData.sourceUrl) {
+    detailSourceBtn.disabled = false;
+    detailSourceBtn.title = '';
+  } else {
+    detailSourceBtn.disabled = true;
+    detailSourceBtn.title = '原文链接不可用';
+  }
+
+  // 同步当前倍速
+  syncDetailSpeedDisplay(speedSelect.value);
+
+  // 同步播放状态
+  updateDetailPlayButtonState(!audioPlayer.paused);
+
+  // 同步进度
+  syncDetailProgress();
+
+  // 显示详情页
+  detailOverlay.style.display = 'block';
+  detailDrawer.style.display = 'flex';
+
+  // 触发动画
+  requestAnimationFrame(() => {
+    detailOverlay.classList.add('visible');
+    detailDrawer.classList.add('visible');
+  });
+
+  isDetailOpen = true;
+}
+
+// 关闭详情页
+function closeDetail() {
+  detailOverlay.classList.remove('visible');
+  detailDrawer.classList.remove('visible');
+
+  setTimeout(() => {
+    detailOverlay.style.display = 'none';
+    detailDrawer.style.display = 'none';
+  }, 300);
+
+  isDetailOpen = false;
+}
+
+// 更新详情页播放按钮状态
+function updateDetailPlayButtonState(isPlaying) {
+  const playIcon = detailPlayBtn?.querySelector('.play-icon');
+  const pauseIcon = detailPlayBtn?.querySelector('.pause-icon');
+  if (playIcon && pauseIcon) {
+    playIcon.style.display = isPlaying ? 'none' : 'block';
+    pauseIcon.style.display = isPlaying ? 'block' : 'none';
+  }
+}
+
+// 同步详情页进度
+function syncDetailProgress() {
+  if (audioPlayer.duration) {
+    const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
+    if (detailProgress) detailProgress.value = progress;
+    if (detailCurrentTime) detailCurrentTime.textContent = formatDuration(audioPlayer.currentTime * 1000);
+    if (detailTotalTime) detailTotalTime.textContent = formatDuration(audioPlayer.duration * 1000);
+  }
+}
+
+// 详情页进度拖动
+function handleDetailSeek() {
+  const time = (detailProgress.value / 100) * audioPlayer.duration;
+  audioPlayer.currentTime = time;
+}
+
+// 快进/快退
+function seekRelative(seconds) {
+  if (!audioPlayer.duration) return;
+  let newTime = audioPlayer.currentTime + seconds;
+  newTime = Math.max(0, Math.min(newTime, audioPlayer.duration));
+  audioPlayer.currentTime = newTime;
+  syncDetailProgress();
+  updateProgress();
+}
+
+// 切换倍速菜单
+function toggleSpeedMenu(e) {
+  e.stopPropagation();
+  const isVisible = detailSpeedMenu.style.display === 'block';
+  detailSpeedMenu.style.display = isVisible ? 'none' : 'block';
+}
+
+// 详情页倍速切换
+function handleDetailSpeedChange(speed) {
+  audioPlayer.playbackRate = speed;
+  speedSelect.value = speed;
+  syncDetailSpeedDisplay(speed);
+  detailSpeedMenu.style.display = 'none';
+}
+
+// 分享功能
+async function handleShare() {
+  if (!currentPodcastId) return;
+
+  const shareUrl = `${window.location.origin}${window.location.pathname}?podcast=${currentPodcastId}`;
+
+  try {
+    // 优先使用 Clipboard API
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(shareUrl);
+      showToast('链接已复制到剪贴板');
+    } else {
+      // 降级方案
+      const textArea = document.createElement('textarea');
+      textArea.value = shareUrl;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      const success = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      if (success) {
+        showToast('链接已复制到剪贴板');
+      } else {
+        showToast('复制失败，请手动复制');
+      }
+    }
+  } catch (err) {
+    console.error('复制失败:', err);
+    showToast('复制失败，请手动复制');
+  }
+}
+
+// 查看原文
+function handleViewSource() {
+  if (currentPodcastData?.sourceUrl) {
+    window.open(currentPodcastData.sourceUrl, '_blank');
+  } else {
+    showToast('原文链接不可用');
+  }
+}
+
+// Toast 提示
+function showToast(message, duration = 2000) {
+  if (!toastEl) return;
+  toastEl.textContent = message;
+  toastEl.style.display = 'block';
+
+  requestAnimationFrame(() => {
+    toastEl.classList.add('visible');
+  });
+
+  setTimeout(() => {
+    toastEl.classList.remove('visible');
+    setTimeout(() => {
+      toastEl.style.display = 'none';
+    }, 300);
+  }, duration);
+}
+
+function shouldOpenDetailFromPlayer(event) {
+  if (!playerSection || playerSection.style.display === 'none') return false;
+  const target = event.target;
+  if (target.closest('button') || target.closest('input') || target.closest('select')) {
+    return false;
+  }
+  if (target.closest('.player-controls') || target.closest('.player-actions') || target.closest('.player-progress-wrapper')) {
+    return false;
+  }
+  return true;
+}
+
+function syncDetailSpeedDisplay(speedValue) {
+  if (!detailSpeedText || !detailSpeedMenu) return;
+  const normalized = String(speedValue);
+  detailSpeedText.textContent = `${normalized}x`;
+  detailSpeedMenu.querySelectorAll('button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.speed === normalized);
+  });
+}
+
+// 处理分享链接
+async function handleShareLink() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const podcastId = urlParams.get('podcast');
+
+  if (podcastId) {
+    try {
+      // 等待播客列表加载完成
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      const response = await fetch(`/api/podcasts/${podcastId}`);
+      if (!response.ok) {
+        throw new Error('播客不存在');
+      }
+
+      const data = await response.json();
+      const podcast = data.podcast || data;
+
+      // 设置当前播客数据但不播放
+      currentPodcastId = podcastId;
+      currentPodcastData = podcast;
+      playerTitle.textContent = podcast.sourceFileName || podcast.title;
+      playerAccount.textContent = podcast.accountName || '微信公众号平台';
+      audioPlayer.src = `/audio/${podcastId}.mp3`;
+      playerSection.style.display = 'block';
+
+      // 打开详情页但不自动播放
+      openDetail();
+
+    } catch (error) {
+      console.error('加载分享播客失败:', error);
+      showToast('播客加载失败');
+    }
+  }
 }
