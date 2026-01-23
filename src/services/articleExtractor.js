@@ -102,12 +102,32 @@ async function extractArticle(url) {
         || document.title?.trim()
         || '微信文章';
 
-      // 提取公众号名称
-      const siteMeta = document.querySelector('meta[property="og:site_name"]');
-      const nameEl = document.querySelector('#js_name') || document.querySelector('.rich_media_meta_nickname');
-      const accountName = siteMeta?.content?.trim()
-        || nameEl?.textContent?.trim()
-        || '公众号';
+      // 提取公众号名称（优先使用页面上的真实昵称）
+      const nicknameEl = document.querySelector('.rich_media_meta_nickname')  // 文章作者昵称
+        || document.querySelector('#js_name')                                  // 公众号名称
+        || document.querySelector('.profile_nickname')                         // 个人资料昵称
+        || document.querySelector('a.wx_tap_link[href*="biz"]');              // 公众号链接文本
+      const authorMeta = document.querySelector('meta[name="author"]');
+
+      // 优先使用 DOM 元素中的真实昵称，避免使用 og:site_name（总是"微信公众平台"）
+      let accountName = nicknameEl?.textContent?.trim()
+        || authorMeta?.content?.trim()
+        || '微信公众平台';
+
+      // 过滤掉无效值
+      if (accountName === '微信公众平台' || accountName === 'Weixin Official Accounts Platform' || !accountName) {
+        // 尝试从页面其他位置获取
+        const allLinks = document.querySelectorAll('a');
+        for (const link of allLinks) {
+          if (link.href?.includes('__biz=') && link.textContent?.trim()) {
+            const text = link.textContent.trim();
+            if (text && text !== '微信公众平台' && text.length < 30) {
+              accountName = text;
+              break;
+            }
+          }
+        }
+      }
 
       // 提取正文内容
       let text = '';
