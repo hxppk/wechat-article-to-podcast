@@ -14,18 +14,15 @@ if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
   console.log('TTS 模块代理已配置:', proxyUrl);
 }
 
-// 多角色声音配置 - 映射到 MultiSpeakerVoiceConfig 的 speaker name
+// 多角色声音配置 - 统一使用 Charon + Callirrhoe
 const SPEAKER_VOICE_MAP = {
-  // 新格式：直接使用 Speaker_A/Speaker_B
-  'Speaker_A': { speakerName: 'Speaker_A', voiceName: 'Fenrir' },      // 老王
-  'Speaker_B': { speakerName: 'Speaker_B', voiceName: 'Callirrhoe' },  // 小李
-  // 兼容中文角色名
-  '老王': { speakerName: 'Speaker_A', voiceName: 'Fenrir' },
+  // Speaker_A (老王) → Charon
+  'Speaker_A': { speakerName: 'Speaker_A', voiceName: 'Charon' },
+  '老王': { speakerName: 'Speaker_A', voiceName: 'Charon' },
+  'A': { speakerName: 'Speaker_A', voiceName: 'Charon' },
+  // Speaker_B (小李) → Callirrhoe
+  'Speaker_B': { speakerName: 'Speaker_B', voiceName: 'Callirrhoe' },
   '小李': { speakerName: 'Speaker_B', voiceName: 'Callirrhoe' },
-  '小墨': { speakerName: 'Speaker_A', voiceName: 'Achird' },
-  '小夏': { speakerName: 'Speaker_B', voiceName: 'Callirrhoe' },
-  // 兼容旧 JSON 格式
-  'A': { speakerName: 'Speaker_A', voiceName: 'Fenrir' },
   'B': { speakerName: 'Speaker_B', voiceName: 'Callirrhoe' }
 };
 
@@ -33,18 +30,16 @@ const SPEAKER_VOICE_MAP = {
 const DEFAULT_STYLE_PROMPT = `
 Create a realistic, conversational podcast in Mandarin Chinese.
 
-1. Speaker_A (老王 - The Veteran):
+1. Speaker_A (老王 - Charon voice):
    - Voice Identity: Male, deep, resonant. **Age: approx. 50 years old.**
    - Audio Quality: **Crystal clear studio recording, high fidelity, NO background static.**
    - Tone: Calm, steady, authoritative but relaxed.
    - Pacing: Thoughtful, slightly slower than Speaker B.
-   - Note: Make the voice sound experienced but clean, not raspy.
 
-2. Speaker_B (小李 - The Rookie):
+2. Speaker_B (小李 - Callirrhoe voice):
    - Voice Identity: Female, clear, articulate, and engaging. **Age: approx. 28 years old.**
    - Tone: Curious, bright, but professional.
    - Interaction: Reacts quickly, asks questions with genuine interest.
-   - Note: Callirrhoe usually sounds calm, so inject some energy and curiosity into her tone.
 
 3. Environment:
    - **Soundproof Podcasting Studio.** (Professional recording environment)
