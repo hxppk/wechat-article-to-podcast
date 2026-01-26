@@ -15,6 +15,35 @@
   <div class="bg-overlay"></div>
 
   <div class="container">
+    <!-- User Section -->
+    <section id="user-section" class="user-section">
+      <!-- 未登录状态 -->
+      <div id="guest-bar" class="user-bar guest-bar">
+        <span class="user-icon">👤</span>
+        <span class="user-text">游客模式</span>
+        <span class="user-quota" id="guest-quota"></span>
+        <button class="login-btn" onclick="openAuthModal('login')">登录</button>
+        <button class="register-btn" onclick="openAuthModal('register')">注册</button>
+      </div>
+      <!-- 已登录状态 -->
+      <div id="user-bar" class="user-bar logged-in-bar" style="display: none;">
+        <span class="user-icon">👤</span>
+        <span class="user-text" id="user-phone"></span>
+        <span class="user-tier" id="user-tier"></span>
+        <span class="user-quota" id="user-quota"></span>
+        <button class="logout-btn" onclick="handleLogout()">退出</button>
+      </div>
+      <!-- 访客提示 -->
+      <div id="guest-warning" class="guest-warning" style="display: none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <span>访客播客仅保留 30 分钟，<a href="javascript:openAuthModal('register')">注册</a>可保留 7 天</span>
+      </div>
+    </section>
+
     <!-- Header -->
     <header class="header">
       <div class="badge">
@@ -186,6 +215,35 @@
 
   <!-- Toast -->
   <div id="toast" class="toast" style="display: none;"></div>
+
+  <!-- Auth Modal -->
+  <div id="auth-overlay" class="auth-overlay" style="display: none;">
+    <div id="auth-modal" class="auth-modal">
+      <button class="auth-close-btn" onclick="closeAuthModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+      <h2 id="auth-title">登录</h2>
+      <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+        <div class="auth-field">
+          <label for="auth-phone">手机号</label>
+          <input type="tel" id="auth-phone" placeholder="请输入手机号" maxlength="11" required>
+        </div>
+        <div class="auth-field">
+          <label for="auth-password">密码</label>
+          <input type="password" id="auth-password" placeholder="请输入密码（至少 6 位）" minlength="6" required>
+        </div>
+        <div id="auth-error" class="auth-error" style="display: none;"></div>
+        <button type="submit" class="auth-submit-btn" id="auth-submit-btn">登录</button>
+      </form>
+      <p class="auth-switch">
+        <span id="auth-switch-text">还没有账号？</span>
+        <a href="javascript:void(0)" id="auth-switch-link" onclick="toggleAuthMode()">去注册</a>
+      </p>
+    </div>
+  </div>
 
   <!-- Player Section -->
   <section id="player-section" class="player-section" style="display: none;">

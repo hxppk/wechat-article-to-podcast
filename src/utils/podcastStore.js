@@ -120,8 +120,9 @@ function generateScriptPreview(scriptText) {
  * @param {string} sourceUrl - 原始文章 URL
  * @param {string} accountName - 公众号名称
  * @param {string} summary - LLM 生成的简介
+ * @param {string} userId - 用户 ID（v1.5 新增）
  */
-async function addPodcast(id, sourceFileName, scriptText, audioPath, scriptPath, sourceUrl = '', accountName = '', summary = '') {
+async function addPodcast(id, sourceFileName, scriptText, audioPath, scriptPath, sourceUrl = '', accountName = '', summary = '', userId = 'public') {
   const podcasts = readPodcasts();
 
   // 生成元数据字段
@@ -131,6 +132,7 @@ async function addPodcast(id, sourceFileName, scriptText, audioPath, scriptPath,
 
   const metadata = {
     id,
+    userId,                           // v1.5 新增
     sourceUrl,
     sourceFileName,
     accountName,
@@ -148,17 +150,28 @@ async function addPodcast(id, sourceFileName, scriptText, audioPath, scriptPath,
   podcasts.unshift(metadata); // 新的在前
   savePodcasts(podcasts);
 
-  console.log(`播客元数据已保存: ${id}, 时长${Math.round(durationMs/1000)}秒, 大小${Math.round(fileSizeBytes/1024)}KB`);
+  console.log(`播客元数据已保存: ${id}, 用户${userId}, 时长${Math.round(durationMs/1000)}秒, 大小${Math.round(fileSizeBytes/1024)}KB`);
 
   return metadata;
 }
 
 /**
  * 获取单个播客
+ * @param {string} id - 播客 ID
+ * @param {string} userId - 用户 ID（v1.5 新增，可选）
  */
-function getPodcast(id) {
+function getPodcast(id, userId = null) {
   const podcasts = readPodcasts();
-  return podcasts.find(p => p.id === id);
+  const podcast = podcasts.find(p => p.id === id);
+
+  if (!podcast) return null;
+
+  // v1.5: 如果提供了 userId，校验归属
+  if (userId !== null && podcast.userId !== userId) {
+    return null;
+  }
+
+  return podcast;
 }
 
 /**
@@ -169,35 +182,53 @@ function getAllPodcasts() {
 }
 
 /**
- * 删除播客
+ * 获取指定用户的播客列表（v1.5 新增）
+ * @param {string} userId - 用户 ID
  */
-function deletePodcast(id) {
+function getByUserId(userId) {
+  const podcasts = readPodcasts();
+  return podcasts.filter(p => p.userId === userId);
+}
+
+/**
+ * 删除播客
+ * @param {string} id - 播客 ID
+ * @param {string} userId - 用户 ID（v1.5 新增，可选）
+ */
+function deletePodcast(id, userId = null) {
   const podcasts = readPodcasts();
   const index = podcasts.findIndex(p => p.id === id);
-  if (index !== -1) {
-    const podcast = podcasts[index];
-    podcasts.splice(index, 1);
-    savePodcasts(podcasts);
 
-    // 删除关联文件
-    try {
-      const audioFile = path.join(__dirname, '../../', podcast.audioPath);
-      const scriptFile = path.join(__dirname, '../../', podcast.scriptPath);
-      if (fs.existsSync(audioFile)) fs.unlinkSync(audioFile);
-      if (fs.existsSync(scriptFile)) fs.unlinkSync(scriptFile);
-    } catch (e) {
-      console.error('删除文件失败:', e.message);
-    }
+  if (index === -1) return false;
 
-    return true;
+  const podcast = podcasts[index];
+
+  // v1.5: 如果提供了 userId，校验归属
+  if (userId !== null && podcast.userId !== userId) {
+    return false;
   }
-  return false;
+
+  podcasts.splice(index, 1);
+  savePodcasts(podcasts);
+
+  // 删除关联文件
+  try {
+    const audioFile = path.join(__dirname, '../../', podcast.audioPath);
+    const scriptFile = path.join(__dirname, '../../', podcast.scriptPath);
+    if (fs.existsSync(audioFile)) fs.unlinkSync(audioFile);
+    if (fs.existsSync(scriptFile)) fs.unlinkSync(scriptFile);
+  } catch (e) {
+    console.error('删除文件失败:', e.message);
+  }
+
+  return true;
 }
 
 module.exports = {
   addPodcast,
   getPodcast,
   getAllPodcasts,
+  getByUserId,      // v1.5 新增
   deletePodcast,
   getAudioDuration,
   generateScriptPreview

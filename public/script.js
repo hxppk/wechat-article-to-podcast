@@ -53,12 +53,206 @@ let podcastsList = []; // 保存播客列表用于上下曲切换
 let currentPodcastData = null; // 当前播客完整数据
 let isDetailOpen = false; // 详情页是否打开
 
+// v2.0: 用户状态
+let currentUser = null;
+let currentQuota = null;
+let isAuthMode = 'login'; // 'login' | 'register'
+
+// v2.0: 带认证的 fetch 封装（使用 Cookie，credentials: 'include'）
+async function authFetch(url, options = {}) {
+  const defaultHeaders = { 'Content-Type': 'application/json' };
+  return fetch(url, {
+    ...options,
+    credentials: 'include',
+    headers: { ...defaultHeaders, ...options.headers }
+  });
+}
+
 // 初始化
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  await checkAuthStatus();
   loadPodcasts();
   setupEventListeners();
   handleShareLink();
 });
+
+// ==================== 用户认证 ====================
+
+// 检查登录状态
+async function checkAuthStatus() {
+  try {
+    const response = await authFetch('/api/auth/me');
+    if (response.ok) {
+      const data = await response.json();
+      currentUser = data.user;
+      currentQuota = data.quota;
+      updateUserUI();
+    } else {
+      // 未登录
+      currentUser = null;
+      updateUserUI();
+    }
+  } catch (error) {
+    console.error('检查登录状态失败:', error);
+    currentUser = null;
+    updateUserUI();
+  }
+}
+
+// 更新用户界面
+function updateUserUI() {
+  const guestBar = document.getElementById('guest-bar');
+  const userBar = document.getElementById('user-bar');
+  const guestWarning = document.getElementById('guest-warning');
+
+  if (currentUser) {
+    // 已登录
+    guestBar.style.display = 'none';
+    userBar.style.display = 'flex';
+    guestWarning.style.display = 'none';
+
+    document.getElementById('user-phone').textContent = maskPhone(currentUser.phone);
+    document.getElementById('user-tier').textContent = getTierName(currentUser.tier);
+
+    if (currentQuota) {
+      document.getElementById('user-quota').textContent =
+        `今日配额: ${currentQuota.usage}/${currentQuota.limit}`;
+    }
+  } else {
+    // 未登录（访客）
+    guestBar.style.display = 'flex';
+    userBar.style.display = 'none';
+    guestWarning.style.display = 'flex';
+
+    // 访客配额显示
+    document.getElementById('guest-quota').textContent = '今日配额: 1 次';
+  }
+}
+
+// 手机号脱敏
+function maskPhone(phone) {
+  if (!phone || phone.length !== 11) return phone;
+  return phone.substring(0, 3) + '****' + phone.substring(7);
+}
+
+// 获取等级名称
+function getTierName(tier) {
+  const names = { guest: '访客', free: '免费用户', paid: '付费用户' };
+  return names[tier] || tier;
+}
+
+// 打开认证弹窗
+function openAuthModal(mode = 'login') {
+  isAuthMode = mode;
+  updateAuthModalUI();
+
+  const overlay = document.getElementById('auth-overlay');
+  overlay.style.display = 'flex';
+
+  // 清空输入
+  document.getElementById('auth-phone').value = '';
+  document.getElementById('auth-password').value = '';
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+// 关闭认证弹窗
+function closeAuthModal() {
+  document.getElementById('auth-overlay').style.display = 'none';
+}
+
+// 切换登录/注册模式
+function toggleAuthMode() {
+  isAuthMode = isAuthMode === 'login' ? 'register' : 'login';
+  updateAuthModalUI();
+}
+
+// 更新认证弹窗 UI
+function updateAuthModalUI() {
+  const title = document.getElementById('auth-title');
+  const submitBtn = document.getElementById('auth-submit-btn');
+  const switchText = document.getElementById('auth-switch-text');
+  const switchLink = document.getElementById('auth-switch-link');
+
+  if (isAuthMode === 'login') {
+    title.textContent = '登录';
+    submitBtn.textContent = '登录';
+    switchText.textContent = '还没有账号？';
+    switchLink.textContent = '去注册';
+  } else {
+    title.textContent = '注册';
+    submitBtn.textContent = '注册';
+    switchText.textContent = '已有账号？';
+    switchLink.textContent = '去登录';
+  }
+}
+
+// 提交认证
+async function handleAuthSubmit(event) {
+  event.preventDefault();
+
+  const phone = document.getElementById('auth-phone').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const errorEl = document.getElementById('auth-error');
+  const submitBtn = document.getElementById('auth-submit-btn');
+
+  // 验证
+  if (!/^1[3-9]\d{9}$/.test(phone)) {
+    errorEl.textContent = '请输入有效的手机号';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  if (password.length < 6) {
+    errorEl.textContent = '密码至少 6 位';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    submitBtn.disabled = true;
+    submitBtn.textContent = isAuthMode === 'login' ? '登录中...' : '注册中...';
+
+    const endpoint = isAuthMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+    const response = await authFetch(endpoint, {
+      method: 'POST',
+      body: JSON.stringify({ phone, password })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || '操作失败');
+    }
+
+    // 成功
+    currentUser = data.user;
+    closeAuthModal();
+    await checkAuthStatus(); // 刷新配额信息
+    loadPodcasts(); // 刷新播客列表
+    showToast(isAuthMode === 'login' ? '登录成功' : '注册成功');
+
+  } catch (error) {
+    errorEl.textContent = error.message;
+    errorEl.style.display = 'block';
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = isAuthMode === 'login' ? '登录' : '注册';
+  }
+}
+
+// 登出
+async function handleLogout() {
+  try {
+    await authFetch('/api/auth/logout', { method: 'POST' });
+    currentUser = null;
+    currentQuota = null;
+    updateUserUI();
+    loadPodcasts();
+    showToast('已退出登录');
+  } catch (error) {
+    console.error('登出失败:', error);
+  }
+}
 
 // 事件监听
 function setupEventListeners() {
@@ -217,9 +411,9 @@ async function handleConvert() {
     hideError();
     showStatus('正在提交...', '');
 
-    const response = await fetch('/api/article', {
+    const response = await authFetch('/api/article', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ url })
     });
 
@@ -276,7 +470,7 @@ function startPolling() {
 
   pollInterval = setInterval(async () => {
     try {
-      const response = await fetch(`/api/status/${currentTaskId}`);
+      const response = await authFetch(`/api/status/${currentTaskId}`);
       const data = await response.json();
 
       if (!response.ok) {
@@ -352,7 +546,7 @@ function hideError() {
 // 加载播客列表
 async function loadPodcasts() {
   try {
-    const response = await fetch('/api/podcasts');
+    const response = await authFetch('/api/podcasts');
     const data = await response.json();
     const podcasts = data.podcasts || data; // 兼容两种格式
     podcastsList = podcasts || []; // 保存到全局变量用于上下曲切换
@@ -454,7 +648,7 @@ async function playPodcast(id) {
       return;
     }
 
-    const response = await fetch(`/api/podcasts/${id}`);
+    const response = await authFetch(`/api/podcasts/${id}`);
     const data = await response.json();
 
     if (!response.ok) {
@@ -467,7 +661,8 @@ async function playPodcast(id) {
     currentPodcastData = podcast; // 保存完整播客数据
     playerTitle.textContent = podcast.sourceFileName || podcast.title;
     playerAccount.textContent = podcast.accountName || '微信公众号平台';
-    audioPlayer.src = `/audio/${id}.mp3`;
+    // v2.0: 使用 API 端点获取音频
+    audioPlayer.src = `/api/podcasts/audio/${id}`;
     audioPlayer.play();
     playerSection.style.display = 'block';
 
@@ -540,7 +735,8 @@ function handleDownload() {
 // 下载播客
 function downloadPodcast(id, filename) {
   const link = document.createElement('a');
-  link.href = `/audio/${id}.mp3`;
+  // v2.0: 使用 API 端点下载
+  link.href = `/api/podcasts/audio/${id}`;
   link.download = `${filename}.mp3`;
   link.click();
 }
@@ -550,7 +746,7 @@ async function deletePodcast(id) {
   if (!confirm('确定要删除这个播客吗？')) return;
 
   try {
-    const response = await fetch(`/api/podcasts/${id}`, { method: 'DELETE' });
+    const response = await authFetch(`/api/podcasts/${id}`, { method: 'DELETE' });
 
     if (!response.ok) {
       const data = await response.json();
@@ -717,9 +913,15 @@ function handleDetailSpeedChange(speed) {
 
 // 分享功能
 async function handleShare() {
-  if (!currentPodcastId) return;
+  if (!currentPodcastData) return;
 
-  const shareUrl = `${window.location.origin}${window.location.pathname}?podcast=${currentPodcastId}`;
+  // v2.0: 优先使用 shareId，若缺失则提示不可用
+  const shareId = currentPodcastData.shareId;
+  if (!shareId) {
+    showToast('分享暂不可用');
+    return;
+  }
+  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareId}`;
 
   try {
     // 优先使用 Clipboard API
@@ -799,27 +1001,29 @@ function syncDetailSpeedDisplay(speedValue) {
 // 处理分享链接
 async function handleShareLink() {
   const urlParams = new URLSearchParams(window.location.search);
-  const podcastId = urlParams.get('podcast');
+  const shareId = urlParams.get('share');
+  const podcastId = urlParams.get('podcast'); // 兼容旧链接
 
-  if (podcastId) {
+  if (shareId) {
+    // v2.0: 使用 shareId 访问分享播客
     try {
-      // 等待播客列表加载完成
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
-      const response = await fetch(`/api/podcasts/${podcastId}`);
+      const response = await fetch(`/api/share/${shareId}`);
       if (!response.ok) {
-        throw new Error('播客不存在');
+        throw new Error('播客不存在或已过期');
       }
 
       const data = await response.json();
-      const podcast = data.podcast || data;
+      const podcast = data.podcast;
 
-      // 设置当前播客数据但不播放
-      currentPodcastId = podcastId;
+      // 设置当前播客数据
+      currentPodcastId = podcast.id;
       currentPodcastData = podcast;
-      playerTitle.textContent = podcast.sourceFileName || podcast.title;
+      playerTitle.textContent = podcast.title || '';
       playerAccount.textContent = podcast.accountName || '微信公众号平台';
-      audioPlayer.src = `/audio/${podcastId}.mp3`;
+      // 使用分享音频端点
+      audioPlayer.src = `/api/share/${shareId}/audio`;
       playerSection.style.display = 'block';
 
       // 打开详情页但不自动播放
@@ -827,6 +1031,32 @@ async function handleShareLink() {
 
     } catch (error) {
       console.error('加载分享播客失败:', error);
+      showToast('播客不存在或已过期');
+    }
+  } else if (podcastId) {
+    // 兼容旧的 ?podcast= 链接格式
+    try {
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const response = await authFetch(`/api/podcasts/${podcastId}`);
+      if (!response.ok) {
+        throw new Error('播客不存在');
+      }
+
+      const data = await response.json();
+      const podcast = data.podcast || data;
+
+      currentPodcastId = podcastId;
+      currentPodcastData = podcast;
+      playerTitle.textContent = podcast.sourceFileName || podcast.title;
+      playerAccount.textContent = podcast.accountName || '微信公众号平台';
+      audioPlayer.src = `/api/podcasts/audio/${podcastId}`;
+      playerSection.style.display = 'block';
+
+      openDetail();
+
+    } catch (error) {
+      console.error('加载播客失败:', error);
       showToast('播客加载失败');
     }
   }

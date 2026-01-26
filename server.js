@@ -9,6 +9,7 @@ if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
 
 const express = require('express');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 
@@ -16,29 +17,47 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 中间件
-app.use(cors());
+app.use(cors({
+  origin: true,
+  credentials: true
+}));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.static('public'));
 
 // 确保数据目录存在
 const dataDir = path.join(__dirname, 'data');
-const audioDir = path.join(dataDir, 'audio');
-const scriptsDir = path.join(dataDir, 'scripts');
+const usersDir = path.join(dataDir, 'users');
+const dbDir = path.join(dataDir, 'db');
 
-[dataDir, audioDir, scriptsDir].forEach(dir => {
+// v2.0: 用户数据在 data/users/{userId}/ 下
+[dataDir, usersDir, dbDir].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
 });
 
-// 音频文件静态服务
-app.use('/audio', express.static(audioDir));
+// v2.0: 音频通过 /api/podcasts/audio/:id 或 /api/share/:shareId/audio 提供
+// 不再使用静态目录，以支持用户隔离和权限校验
 
 // API 路由
 const articleRouter = require('./src/routes/article');
 const statusRouter = require('./src/routes/status');
 const podcastRouter = require('./src/routes/podcast');
+const authRouter = require('./src/routes/auth');
+const shareRouter = require('./src/routes/share');
+const authMiddleware = require('./src/middleware/auth');
 
+// v2.0: 全局 auth 中间件（解析用户身份）
+app.use(authMiddleware);
+
+// 认证路由（不需要登录）
+app.use('/api/auth', authRouter);
+
+// 分享路由（匿名可访问）
+app.use('/api/share', shareRouter);
+
+// 业务路由
 app.use('/api/article', articleRouter);
 app.use('/api/status', statusRouter);
 app.use('/api/podcasts', podcastRouter);
@@ -55,44 +74,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// 文件清理定时任务（1 小时过期）
-// 默认禁用，设置 ENABLE_FILE_CLEANUP=true 启用
-if (process.env.ENABLE_FILE_CLEANUP === 'true') {
-  console.log('文件清理任务已启用（1小时过期）');
-  setInterval(() => {
-    const now = Date.now();
-    const maxAge = 60 * 60 * 1000; // 1 小时
-
-    // 清理音频文件
-    if (fs.existsSync(audioDir)) {
-      fs.readdirSync(audioDir).forEach(file => {
-        const filePath = path.join(audioDir, file);
-        try {
-          const stats = fs.statSync(filePath);
-          if (now - stats.mtimeMs > maxAge) {
-            fs.unlinkSync(filePath);
-            console.log('已清理过期音频:', file);
-          }
-        } catch (e) { /* ignore */ }
-      });
-    }
-
-    // 清理脚本文件
-    if (fs.existsSync(scriptsDir)) {
-      fs.readdirSync(scriptsDir).forEach(file => {
-        const filePath = path.join(scriptsDir, file);
-        try {
-          const stats = fs.statSync(filePath);
-          if (now - stats.mtimeMs > maxAge) {
-            fs.unlinkSync(filePath);
-            console.log('已清理过期脚本:', file);
-          }
-        } catch (e) { /* ignore */ }
-      });
-    }
-  }, 30 * 60 * 1000); // 每 30 分钟检查一次
+// v2.0: 数据清理任务（按用户等级）
+// 默认启用，设置 DISABLE_CLEANUP=true 禁用
+if (process.env.DISABLE_CLEANUP !== 'true') {
+  const cleanup = require('./src/services/cleanup');
+  // 每 5 分钟检查一次
+  cleanup.startCleanupTask(5 * 60 * 1000);
 } else {
-  console.log('文件清理任务已禁用（播客将永久保留）');
+  console.log('[cleanup] 清理任务已禁用');
 }
 
 // 启动服务

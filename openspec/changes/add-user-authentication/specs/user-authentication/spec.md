@@ -2,43 +2,48 @@
 
 ## ADDED Requirements
 
-### Requirement: OAuth 登录
-系统 SHALL 支持通过 OAuth 2.0 进行用户登录。
+### Requirement: 手机号注册
+系统 SHALL 支持手机号与密码注册。
 
-#### Scenario: Google OAuth 登录成功
-- **WHEN** 用户点击 Google 登录按钮
-- **THEN** 系统重定向到 Google 授权页面
-- **AND** 用户授权后回调到系统
-- **AND** 系统创建或更新用户记录
-- **AND** 系统签发 JWT token 并设置到 Cookie
+#### Scenario: 注册成功
+- **WHEN** 用户提交有效手机号与密码
+- **THEN** 系统创建用户记录
+- **AND** 密码以哈希形式存储
+- **AND** 默认 tier = free
 
-#### Scenario: 新用户首次登录
-- **WHEN** 用户首次通过 OAuth 登录
-- **THEN** 系统创建新用户记录
-- **AND** 用户记录包含：id, email, name, avatar_url, provider
+#### Scenario: 手机号重复
+- **WHEN** 用户注册已存在手机号
+- **THEN** 系统返回 409
 
-#### Scenario: 老用户再次登录
-- **WHEN** 用户再次通过 OAuth 登录
-- **THEN** 系统更新 last_login_at 时间
-- **AND** 不创建重复用户
+### Requirement: 手机号登录
+系统 SHALL 支持手机号与密码登录。
+
+#### Scenario: 登录成功
+- **WHEN** 用户提交正确手机号与密码
+- **THEN** 系统签发 JWT
+- **AND** 设置 HttpOnly Cookie
+
+#### Scenario: 密码错误
+- **WHEN** 用户提交错误密码
+- **THEN** 系统返回 401
+
+### Requirement: 登录失败限制
+系统 SHALL 限制同手机号的登录失败次数。
+
+#### Scenario: 达到限制
+- **WHEN** 同一手机号在 10 分钟内失败 5 次
+- **THEN** 系统返回 429
 
 ### Requirement: JWT Session 管理
 系统 SHALL 使用 JWT 管理用户会话。
 
-#### Scenario: Token 签发
-- **WHEN** 用户登录成功
-- **THEN** 系统签发 JWT token
-- **AND** token 包含用户 id 和基本信息
-- **AND** token 有效期为 7 天
-- **AND** token 存储在 HttpOnly Cookie
-
 #### Scenario: Token 验证
-- **WHEN** 请求携带有效 token
+- **WHEN** 请求携带有效 JWT Cookie
 - **THEN** 系统解析 token 获取用户信息
-- **AND** 设置 req.user 和 req.userId
+- **AND** 设置 req.userId
 
-#### Scenario: Token 过期
-- **WHEN** 请求携带过期 token
+#### Scenario: Token 无效
+- **WHEN** 请求携带无效或过期 token
 - **THEN** 系统将用户视为匿名
 - **AND** 设置 req.userId = 'public'
 
@@ -48,28 +53,22 @@
 #### Scenario: 登出成功
 - **WHEN** 用户请求 POST /api/auth/logout
 - **THEN** 系统清除 token Cookie
-- **AND** 返回登出成功
 
 ### Requirement: 获取当前用户
 系统 SHALL 提供获取当前用户信息的 API。
 
 #### Scenario: 已登录用户
 - **WHEN** 已登录用户请求 GET /api/auth/me
-- **THEN** 系统返回用户信息（id, email, name, avatar_url, tier）
+- **THEN** 系统返回用户信息（id, phone, tier）
 
 #### Scenario: 匿名用户
 - **WHEN** 匿名用户请求 GET /api/auth/me
-- **THEN** 系统返回 401 未授权
+- **THEN** 系统返回 401
 
 ### Requirement: 匿名访问支持
-系统 SHALL 支持匿名用户访问。
+系统 SHALL 支持匿名用户访问基础功能。
 
 #### Scenario: 无 token 访问
 - **WHEN** 请求未携带 token
 - **THEN** 系统设置 req.userId = 'public'
-- **AND** 允许访问基本功能（受配额限制）
-
-#### Scenario: 匿名用户提示
-- **WHEN** 匿名用户使用系统
-- **THEN** 前端显示提示："您正在以访客身份使用"
-- **AND** 显示登录引导
+- **AND** 允许访问基础功能（受配额限制）

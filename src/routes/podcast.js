@@ -1,31 +1,35 @@
+/**
+ * 播客路由 (v2.0)
+ * 使用 SQLite 存储
+ */
 const express = require('express');
 const router = express.Router();
-const path = require('path');
 const fs = require('fs');
-const podcastStore = require('../utils/podcastStore');
+const podcasts = require('../db/podcasts');
 
-const AUDIO_DIR = path.join(__dirname, '../../data/audio');
+// v2.0: authMiddleware 已在 server.js 全局应用
 
 /**
  * GET /api/podcasts
- * 获取所有播客列表
+ * 获取当前用户的播客列表
  */
 router.get('/', (req, res) => {
-  const podcasts = podcastStore.getAllPodcasts();
+  const list = podcasts.findByUserId(req.userId);
   res.json({
     success: true,
-    count: podcasts.length,
-    podcasts
+    count: list.length,
+    podcasts: list
   });
 });
 
 /**
- * GET /api/podcast/:id
- * 获取单个播客详情
+ * GET /api/podcasts/audio/:id
+ * 获取音频文件流（需要权限校验）
+ * 注意：此路由必须在 /:id 之前，否则会被误匹配
  */
-router.get('/:id', (req, res) => {
+router.get('/audio/:id', (req, res) => {
   const { id } = req.params;
-  const podcast = podcastStore.getPodcast(id);
+  const podcast = podcasts.findById(id, req.userId);
 
   if (!podcast) {
     return res.status(404).json({
@@ -34,42 +38,8 @@ router.get('/:id', (req, res) => {
     });
   }
 
-  res.json({
-    success: true,
-    podcast
-  });
-});
-
-/**
- * DELETE /api/podcast/:id
- * 删除播客
- */
-router.delete('/:id', (req, res) => {
-  const { id } = req.params;
-  const deleted = podcastStore.deletePodcast(id);
-
-  if (!deleted) {
-    return res.status(404).json({
-      error: '播客不存在',
-      code: 'PODCAST_NOT_FOUND'
-    });
-  }
-
-  res.json({
-    success: true,
-    message: '播客已删除'
-  });
-});
-
-/**
- * GET /audio/:id
- * 获取音频文件流
- */
-router.get('/audio/:id', (req, res) => {
-  const { id } = req.params;
-  const audioPath = path.join(AUDIO_DIR, `${id}.mp3`);
-
-  if (!fs.existsSync(audioPath)) {
+  const audioPath = podcast.audioPath;
+  if (!audioPath || !fs.existsSync(audioPath)) {
     return res.status(404).json({
       error: '音频文件不存在',
       code: 'AUDIO_NOT_FOUND'
@@ -77,8 +47,7 @@ router.get('/audio/:id', (req, res) => {
   }
 
   const stat = fs.statSync(audioPath);
-  const podcast = podcastStore.getPodcast(id);
-  const fileName = podcast ? `${podcast.sourceFileName.replace('.pdf', '')}.mp3` : `${id}.mp3`;
+  const fileName = podcast.title ? `${podcast.title}.mp3` : `${id}.mp3`;
 
   res.setHeader('Content-Type', 'audio/mpeg');
   res.setHeader('Content-Length', stat.size);
@@ -103,6 +72,48 @@ router.get('/audio/:id', (req, res) => {
     const stream = fs.createReadStream(audioPath);
     stream.pipe(res);
   }
+});
+
+/**
+ * GET /api/podcasts/:id
+ * 获取单个播客详情（按 userId 校验）
+ */
+router.get('/:id', (req, res) => {
+  const { id } = req.params;
+  const podcast = podcasts.findById(id, req.userId);
+
+  if (!podcast) {
+    return res.status(404).json({
+      error: '播客不存在',
+      code: 'PODCAST_NOT_FOUND'
+    });
+  }
+
+  res.json({
+    success: true,
+    podcast
+  });
+});
+
+/**
+ * DELETE /api/podcasts/:id
+ * 删除播客（按 userId 校验归属）
+ */
+router.delete('/:id', (req, res) => {
+  const { id } = req.params;
+  const deleted = podcasts.remove(id, req.userId);
+
+  if (!deleted) {
+    return res.status(404).json({
+      error: '播客不存在',
+      code: 'PODCAST_NOT_FOUND'
+    });
+  }
+
+  res.json({
+    success: true,
+    message: '播客已删除'
+  });
 });
 
 module.exports = router;

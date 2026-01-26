@@ -1,19 +1,41 @@
+/**
+ * 任务队列 (v2.0)
+ * 使用用户隔离目录和 SQLite 存储
+ */
 const { v4: uuid } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 const { extractArticle, ValidationError } = require('./articleExtractor');
 const { calculateEta, formatEta } = require('./eta');
-const podcastStore = require('../utils/podcastStore');
+const podcasts = require('../db/podcasts');
 
-const AUDIO_DIR = path.join(__dirname, '../../data/audio');
-const SCRIPTS_DIR = path.join(__dirname, '../../data/scripts');
+const DATA_DIR = path.join(__dirname, '../../data');
 
-// 确保目录存在
-[AUDIO_DIR, SCRIPTS_DIR].forEach(dir => {
+/**
+ * 获取用户的音频目录
+ * @param {string} userId - 用户 ID
+ * @returns {string} 目录路径
+ */
+function getUserAudioDir(userId) {
+  const dir = path.join(DATA_DIR, 'users', userId, 'audio');
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
-});
+  return dir;
+}
+
+/**
+ * 获取用户的脚本目录
+ * @param {string} userId - 用户 ID
+ * @returns {string} 目录路径
+ */
+function getUserScriptsDir(userId) {
+  const dir = path.join(DATA_DIR, 'users', userId, 'scripts');
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
 
 // 状态文本映射
 const STATUS_TEXT = {
@@ -54,12 +76,14 @@ class TaskQueue {
   /**
    * 创建任务
    * @param {string} articleUrl - 微信文章 URL
+   * @param {string} userId - 用户 ID（v1.5 新增）
    */
-  createTask(articleUrl) {
+  createTask(articleUrl, userId = 'public') {
     const task = {
       id: uuid(),
       status: 'pending',
       articleUrl,
+      userId,           // v1.5 新增
       title: null,
       accountName: null,
       createdAt: Date.now(),
@@ -139,8 +163,12 @@ class TaskQueue {
     console.log(`[${taskId}] 使用 ${this.llm.getName()} 生成脚本...`);
     const script = await this.llm.generateScript(articleData.text);
 
+    // v2.0: 使用用户目录
+    const audioDir = getUserAudioDir(task.userId);
+    const scriptsDir = getUserScriptsDir(task.userId);
+
     // 保存脚本
-    const scriptPath = path.join(SCRIPTS_DIR, `${taskId}.json`);
+    const scriptPath = path.join(scriptsDir, `${taskId}.json`);
     fs.writeFileSync(scriptPath, JSON.stringify({
       raw: script.raw,
       dialogues: script.dialogues,
@@ -150,20 +178,25 @@ class TaskQueue {
     // Stage 3: 合成语音
     this.updateStatus(taskId, 'synthesizing');
     console.log(`[${taskId}] 使用 ${this.tts.getName()} 合成音频...`);
-    const audioPath = path.join(AUDIO_DIR, `${taskId}.mp3`);
+    const audioPath = path.join(audioDir, `${taskId}.mp3`);
     await this.tts.synthesize(script.dialogues, audioPath);
 
-    // Stage 4: 保存元数据
-    await podcastStore.addPodcast(
-      taskId,
-      articleData.title,
-      script.raw,
+    // 获取文件大小和时长信息
+    const stat = fs.statSync(audioPath);
+
+    // Stage 4: 保存到 SQLite
+    podcasts.create({
+      id: taskId,
+      userId: task.userId,
+      sourceUrl: task.articleUrl,
+      title: articleData.title,
+      accountName: articleData.accountName,
+      fileSizeBytes: stat.size,
+      summary: script.summary || '',
+      scriptPreview: script.raw.substring(0, 500),
       audioPath,
-      scriptPath,
-      task.articleUrl,
-      articleData.accountName,
-      script.summary || ''  // LLM 生成的简介
-    );
+      scriptPath
+    });
 
     // 完成
     this.updateStatus(taskId, 'completed');
