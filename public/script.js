@@ -413,7 +413,6 @@ async function handleConvert() {
 
     const response = await authFetch('/api/article', {
       method: 'POST',
-      headers: getAuthHeaders(),
       body: JSON.stringify({ url })
     });
 
