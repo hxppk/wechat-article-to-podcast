@@ -5,9 +5,30 @@
 const { v4: uuid } = require('uuid');
 const path = require('path');
 const fs = require('fs');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 const { extractArticle, ValidationError } = require('./articleExtractor');
 const { calculateEta, formatEta } = require('./eta');
 const podcasts = require('../db/podcasts');
+
+/**
+ * 使用 ffprobe 获取音频时长（毫秒）
+ * @param {string} audioPath - 音频文件路径
+ * @returns {Promise<number>} 时长（毫秒）
+ */
+async function getAudioDuration(audioPath) {
+  try {
+    const { stdout } = await execAsync(
+      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`
+    );
+    const seconds = parseFloat(stdout.trim());
+    return Math.round(seconds * 1000);
+  } catch (err) {
+    console.warn('获取音频时长失败:', err.message);
+    return 0;
+  }
+}
 
 const DATA_DIR = path.join(__dirname, '../../data');
 
@@ -218,6 +239,8 @@ class TaskQueue {
 
     // 获取文件大小和时长信息
     const stat = fs.statSync(audioPath);
+    const durationMs = await getAudioDuration(audioPath);
+    console.log(`[${taskId}] 音频时长: ${Math.round(durationMs / 1000)}秒`);
 
     // Stage 4: 保存到 SQLite
     podcasts.create({
@@ -226,6 +249,7 @@ class TaskQueue {
       sourceUrl: task.articleUrl,
       title: articleData.title,
       accountName: articleData.accountName,
+      durationMs,
       fileSizeBytes: stat.size,
       summary: script.summary || '',
       scriptPreview: script.raw.substring(0, 500),

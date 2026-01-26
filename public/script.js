@@ -587,11 +587,11 @@ async function loadPodcasts() {
                 ${podcast.accountName ? escapeHtml(podcast.accountName) : '微信公众号平台'}
               </span>
               <span class="meta-dot"></span>
-              <span>${formatDuration(podcast.durationMs)}</span>
+              <span class="podcast-duration" data-duration="${podcast.durationMs || 0}">${formatDuration(podcast.durationMs, true)}</span>
               <span class="meta-dot"></span>
               <span>${formatFileSize(podcast.fileSizeBytes)}</span>
               <span class="meta-dot"></span>
-              <span>${formatTime(podcast.generatedAt)}</span>
+              <span>${formatTime(podcast.generatedAt || podcast.createdAt)}</span>
             </div>
             <p class="podcast-preview">${escapeHtml(podcast.summary || podcast.scriptPreview || '暂无简介')}</p>
           </div>
@@ -621,6 +621,7 @@ function updatePlayingCardState() {
     const isPlaying = item.dataset.id === currentPodcastId && !audioPlayer.paused;
     const playIcon = item.querySelector('.podcast-play-btn .play-icon');
     const pauseIcon = item.querySelector('.podcast-play-btn .pause-icon');
+    const durationEl = item.querySelector('.podcast-duration');
 
     if (item.dataset.id === currentPodcastId) {
       item.classList.add('playing');
@@ -634,8 +635,27 @@ function updatePlayingCardState() {
         playIcon.style.display = 'block';
         pauseIcon.style.display = 'none';
       }
+      // 非播放卡片恢复原始时长显示
+      if (durationEl) {
+        const originalDuration = parseInt(durationEl.dataset.duration) || 0;
+        durationEl.textContent = formatDuration(originalDuration, true);
+      }
     }
   });
+}
+
+// 更新正在播放卡片的时间显示
+function updatePlayingCardTime() {
+  if (!currentPodcastId) return;
+  const playingItem = document.querySelector(`.podcast-item[data-id="${currentPodcastId}"]`);
+  if (!playingItem) return;
+
+  const durationEl = playingItem.querySelector('.podcast-duration');
+  if (durationEl && audioPlayer.duration) {
+    const currentTime = formatDuration(audioPlayer.currentTime * 1000);
+    const totalTime = formatDuration(audioPlayer.duration * 1000);
+    durationEl.textContent = `${currentTime} / ${totalTime}`;
+  }
 }
 
 // 播放播客
@@ -700,11 +720,16 @@ function updateProgress() {
     if (isDetailOpen) {
       syncDetailProgress();
     }
+
+    // 同步列表卡片时间显示
+    updatePlayingCardTime();
   }
 }
 
 function updateDuration() {
   totalTimeEl.textContent = formatDuration(audioPlayer.duration * 1000);
+  // 同步列表卡片时间显示
+  updatePlayingCardTime();
   // 同步详情页时长
   if (detailTotalTime) {
     detailTotalTime.textContent = formatDuration(audioPlayer.duration * 1000);
@@ -768,8 +793,8 @@ async function deletePodcast(id) {
 }
 
 // 工具函数
-function formatDuration(ms) {
-  if (!ms) return '0:00';
+function formatDuration(ms, showPlaceholder = false) {
+  if (!ms || ms <= 0) return showPlaceholder ? '--:--' : '0:00';
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
