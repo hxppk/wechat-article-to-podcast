@@ -53,29 +53,39 @@ class LLMProvider {
   - 任务: 负责提问和捧哏。听到惊人观点时要有强烈的情绪反应。
 
 # Conversation Rules (The "NotebookLM" Style)
-1. 拒绝“清单体” (Anti-Listicle):
-   - 严禁出现“第一点、第二点”或“文章里提到了”。
-   - 必须通过对话流自然引出。例如：“哎，除此之外，我还发现个特逗的事儿...”
+1. 拒绝"清单体" (Anti-Listicle):
+   - 严禁出现"第一点、第二点"或"文章里提到了"。
+   - 必须通过对话流自然引出。例如："哎，除此之外，我还发现个特逗的事儿..."
 
-2. 强制“不完美感” (Imperfections):
-   - 文本中必须包含自然的口语停顿：“那个...”、“呃...”、“就是...”、“咋说呢”。
+2. 强制"不完美感" (Imperfections):
+   - 文本中必须包含自然的口语停顿："那个..."、"呃..."、"就是..."、"咋说呢"。
    - 自我纠错：模拟真人思考过程。
-     * Bad: “这是一个复杂的算法。”
-     * Good: “这算法...咋说呢，其实挺复杂的，但你可以把它想象成...”
+     * Bad: "这是一个复杂的算法。"
+     * Good: "这算法...咋说呢，其实挺复杂的，但你可以把它想象成..."
 
 3. 开场即高潮 (Start in Medias Res):
-   - 不要写开场白（“大家好，欢迎收听...”）。
+   - 不要写开场白（"大家好，欢迎收听..."）。
    - 直接开始：就像录音键按下时，两人已经聊了一半。
-     * 示例：“哎老王，我今天看了这篇材料，真的被吓到了...”
+     * 示例："哎老王，我今天看了这篇材料，真的被吓到了..."
 
 4. 生活化类比:
-   - 遇到抽象概念，强制要求老王用“吃火锅”、“装修”、“谈恋爱”等生活场景打比方。
+   - 遇到抽象概念，强制要求老王用"吃火锅"、"装修"、"谈恋爱"等生活场景打比方。
+
+5. 插嘴标记 (Interrupt Marker):
+   - 当下一句是"插嘴/打断"时，上一句必须以 -- 结尾（双减号）。
+   - 插嘴场景：对方话没说完就被打断、表达惊讶/不同意、急于追问等。
+   - 示例：
+     * Speaker_A: 这个架构其实--
+     * Speaker_B: 等等，你说的是那个分布式的吗？
+   - 正常轮换（对方说完了再接）不需要 --。
 
 # Output Format Example
 Speaker_B: 哎老王，我今天看了这个材料，有个地儿我没太看懂。
 Speaker_A: 你是说那个...关于架构的部分？
-Speaker_B: 对！它说那个是“解耦”的，啥意思啊？
-Speaker_A: 这么跟你说吧，这就好比你家里装修...
+Speaker_B: 对！它说那个是"解耦"的，啥意思啊？
+Speaker_A: 这么跟你说吧，这就好比你家里装修--
+Speaker_B: 等等，又是装修？你上次也用这个比喻！
+Speaker_A: 哈哈，好吧好吧，换一个...
 ...
 # Summary: 这期节目我们聊了...（150字以内，极具吸引力的口语化简介）
 
@@ -132,6 +142,7 @@ ${pdfText}
 
   /**
    * 解析 Speaker_A/Speaker_B 格式
+   * 支持 -- 结尾作为"插嘴"标记
    */
   parseSpeakerFormat(rawScript) {
     const dialogues = [];
@@ -140,9 +151,19 @@ ${pdfText}
     for (const line of lines) {
       const match = line.match(/^(Speaker_[AB])\s*[:：]\s*(.+)/i);
       if (match) {
+        let text = match[2].trim();
+        let isInterrupt = false;
+
+        // 检测 -- 结尾标记（表示下一句是插嘴）
+        if (text.endsWith('--')) {
+          isInterrupt = true;
+          text = text.slice(0, -2).trim();
+        }
+
         dialogues.push({
           speaker: match[1],
-          text: match[2].trim()
+          text,
+          isInterrupt
         });
       }
     }
@@ -176,6 +197,7 @@ ${pdfText}
 
   /**
    * 解析中文角色名格式
+   * 支持 -- 结尾作为"插嘴"标记
    */
   parseChineseFormat(rawScript) {
     const dialogues = [];
@@ -185,9 +207,18 @@ ${pdfText}
       const match = line.match(/^(老王|小李|小墨|小夏)\s*[:：]\s*(.+)/);
       if (match) {
         const speaker = match[1] === '老王' || match[1] === '小墨' ? 'Speaker_A' : 'Speaker_B';
+        let text = match[2].trim();
+        let isInterrupt = false;
+
+        if (text.endsWith('--')) {
+          isInterrupt = true;
+          text = text.slice(0, -2).trim();
+        }
+
         dialogues.push({
           speaker,
-          text: match[2].trim()
+          text,
+          isInterrupt
         });
       }
     }

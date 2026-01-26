@@ -46,20 +46,31 @@ Create a realistic, conversational podcast in Mandarin Chinese.
    - Zero ambient noise, zero music.
 
 4. Language: Mandarin Chinese (Colloquial & Natural).
+
+5. Pacing Rules:
+   - Lines ending with "--" indicate an interruption: the speaker trails off as the next speaker cuts in.
+   - For interruptions: minimal pause (<100ms), next speaker starts almost immediately.
+   - Normal turn-taking: natural pause (200-300ms) between speakers.
 `;
 
 // 重试配置 - 增加延迟应对限流
 const RETRY_CONFIG = {
   maxRetries: 5,
-  baseDelayMs: 3000,
-  maxDelayMs: 30000
+  baseDelayMs: 6000, // 增加基础延迟
+  maxDelayMs: 60000  // 增加最大延迟
 };
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+function isRawPcmMimeType(mimeType) {
+  if (!mimeType) return false;
+  const lower = mimeType.toLowerCase();
+  return lower.includes('audio/l16') || lower.includes('pcm');
+}
+
 /**
  * Gemini TTS 实现
- * 使用 Gemini 2.5 Flash TTS 的原生多角色功能，一次 API 调用生成完整音频
+ * 使用 Gemini 2.5 Pro Preview TTS 的原生多角色功能，一次 API 调用生成完整音频
  */
 class GeminiTTS extends TTSProvider {
   constructor() {
@@ -77,7 +88,7 @@ class GeminiTTS extends TTSProvider {
 
   /**
    * 将对话数组转换为多角色文本格式
-   * @param {Array<{speaker: string, text: string}>} dialogues
+   * @param {Array<{speaker: string, text: string, isInterrupt?: boolean}>} dialogues
    * @param {string} stylePrompt
    * @returns {{text: string, speakers: Array<{speaker: string, voiceName: string}>}}
    */
@@ -106,7 +117,12 @@ class GeminiTTS extends TTSProvider {
       }
 
       // 格式化为 "Speaker_X: 文本" 格式
-      lines.push(`${speakerName}: ${dialogue.text}`);
+      // 如果是插嘴场景，保留 -- 标记影响 TTS 节奏
+      let text = dialogue.text;
+      if (dialogue.isInterrupt) {
+        text = text + '--';
+      }
+      lines.push(`${speakerName}: ${text}`);
     }
 
     // 构建 speakers 配置
@@ -132,7 +148,7 @@ class GeminiTTS extends TTSProvider {
         console.log(`正在调用 Gemini TTS API (尝试 ${attempt}/${RETRY_CONFIG.maxRetries})...`);
 
         const response = await this.client.models.generateContent({
-          model: 'gemini-2.5-flash-preview-tts',
+          model: 'gemini-2.5-pro-preview-tts',
           contents: [{ parts: [{ text }] }],
           config: {
             responseModalities: ['AUDIO'],
@@ -149,17 +165,20 @@ class GeminiTTS extends TTSProvider {
           }
         });
 
+        const inlineData = response?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
         // 验证响应格式
-        if (!response?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data) {
+        if (!inlineData?.data) {
           throw new Error('TTS API 返回数据格式异常');
         }
 
-        const audioData = response.candidates[0].content.parts[0].inlineData.data;
+        const mimeType = inlineData.mimeType || 'unknown';
+        console.log(`TTS 输出 mimeType: ${mimeType}`);
+        const audioData = inlineData.data;
         const audioBuffer = Buffer.from(audioData, 'base64');
         fs.writeFileSync(outputPath, audioBuffer);
 
         console.log('TTS API 调用成功');
-        return;
+        return { mimeType };
       } catch (error) {
         lastError = error;
         console.log(`TTS 错误详情: ${error.message}`);
@@ -193,8 +212,8 @@ class GeminiTTS extends TTSProvider {
   }
 
   /**
-   * 合成完整播客 - 使用多角色一次性生成
-   * @param {Array<{speaker: string, text: string}>} dialogues
+   * 合成完整播客 - 一次性生成完整音频
+   * @param {Array<{speaker: string, text: string, isInterrupt?: boolean}>} dialogues
    * @param {string} outputPath
    * @param {{stylePrompt?: string}} options
    */
@@ -203,46 +222,36 @@ class GeminiTTS extends TTSProvider {
       throw new Error('对话数据无效');
     }
 
-    console.log(`开始合成 ${dialogues.length} 段对话（多角色一次性生成）...`);
-
-    // 转换为多角色格式
     const stylePrompt = options.stylePrompt || DEFAULT_STYLE_PROMPT;
     const { text, speakers } = this.convertToMultiSpeakerFormat(dialogues, stylePrompt);
-
-    console.log(`角色配置: ${speakers.map(s => `${s.speaker}=${s.voiceName}`).join(', ')}`);
-    console.log(`文本长度: ${text.length} 字符`);
+    console.log(`开始合成 ${dialogues.length} 段对话（一次性生成）...`);
+    console.log(`  - 文本长度: ${text.length} 字符`);
 
     const tempDir = path.dirname(outputPath);
     const taskId = path.basename(outputPath, '.mp3');
-    const pcmPath = path.join(tempDir, `${taskId}_raw.pcm`);
+    const tempAudioPath = path.join(tempDir, `${taskId}_raw.bin`);
 
     try {
-      // 一次性调用 API 生成完整音频
-      await this.synthesizeWithRetry(text, speakers, pcmPath);
+      const { mimeType } = await this.synthesizeWithRetry(text, speakers, tempAudioPath);
+      const needsRawInput = isRawPcmMimeType(mimeType);
+      const ffmpegInput = needsRawInput
+        ? `-f s16le -ar 24000 -ac 1 -i "${tempAudioPath}"`
+        : `-i "${tempAudioPath}"`;
 
-      // 转换为 MP3
       console.log('正在转换为 MP3 格式...');
       await execAsync(
-        `ffmpeg -y -f s16le -ar 24000 -ac 1 -i "${pcmPath}" -codec:a libmp3lame -qscale:a 2 "${outputPath}"`
+        `ffmpeg -y ${ffmpegInput} -codec:a libmp3lame -qscale:a 2 "${outputPath}"`
       );
-
       console.log(`音频已保存: ${outputPath}`);
-
-      // 清理临时文件
-      try {
-        if (fs.existsSync(pcmPath)) fs.unlinkSync(pcmPath);
-      } catch (e) { /* ignore */ }
-
     } catch (error) {
-      // 清理临时文件
-      try {
-        if (fs.existsSync(pcmPath)) fs.unlinkSync(pcmPath);
-      } catch (e) { /* ignore */ }
-
       if (error.message.includes('fetch failed')) {
         throw new Error('语音合成网络连接失败，请检查网络或代理设置后重试');
       }
       throw new Error(`语音合成失败: ${error.message}`);
+    } finally {
+      try {
+        if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
+      } catch (e) { /* ignore */ }
     }
   }
 }
