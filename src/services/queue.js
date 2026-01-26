@@ -37,6 +37,38 @@ function getUserScriptsDir(userId) {
   return dir;
 }
 
+/**
+ * 保存原始脚本到本地（用于人工优化）
+ * @param {string} taskId - 任务 ID
+ * @param {string} rawScript - 原始脚本文本
+ * @param {string} prompt - 生成时使用的 prompt（可选）
+ */
+function saveRawScript(taskId, rawScript, prompt = null) {
+  try {
+    const rawScriptsDir = path.join(DATA_DIR, 'raw-scripts');
+    if (!fs.existsSync(rawScriptsDir)) {
+      fs.mkdirSync(rawScriptsDir, { recursive: true });
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `${taskId}_${timestamp}.txt`;
+    const filePath = path.join(rawScriptsDir, fileName);
+
+    let content = '';
+    if (prompt) {
+      content += '=== PROMPT ===\n';
+      content += prompt + '\n\n';
+    }
+    content += '=== RAW SCRIPT ===\n';
+    content += rawScript;
+
+    fs.writeFileSync(filePath, content, 'utf-8');
+    console.log(`[${taskId}] 原始脚本已保存: ${fileName}`);
+  } catch (err) {
+    console.warn(`[${taskId}] 保存原始脚本失败:`, err.message);
+  }
+}
+
 // 状态文本映射
 const STATUS_TEXT = {
   pending: '等待处理',
@@ -162,6 +194,9 @@ class TaskQueue {
     this.updateStatus(taskId, 'generating');
     console.log(`[${taskId}] 使用 ${this.llm.getName()} 生成脚本...`);
     const script = await this.llm.generateScript(articleData.text);
+
+    // 保存原始脚本（用于人工优化）
+    saveRawScript(taskId, script.raw);
 
     // v2.0: 使用用户目录
     const audioDir = getUserAudioDir(task.userId);

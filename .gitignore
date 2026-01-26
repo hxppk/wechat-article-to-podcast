@@ -2,6 +2,9 @@ node_modules/
 data/audio/
 data/scripts/
 data/podcasts.json
+data/db/
+data/users/
+data/raw-scripts/
 .env
 .DS_Store
 *.log
