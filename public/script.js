@@ -57,6 +57,8 @@ let isDetailOpen = false; // 详情页是否打开
 let currentUser = null;
 let currentQuota = null;
 let isAuthMode = 'login'; // 'login' | 'register'
+const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+let wechatConfigPromise = null;
 
 // v2.0: 带认证的 fetch 封装（使用 Cookie，credentials: 'include'）
 async function authFetch(url, options = {}) {
@@ -66,6 +68,79 @@ async function authFetch(url, options = {}) {
     credentials: 'include',
     headers: { ...defaultHeaders, ...options.headers }
   });
+}
+
+// 微信 JS-SDK 配置
+async function ensureWeChatConfig() {
+  if (!isWeChat || !window.wx) return false;
+  if (wechatConfigPromise) return wechatConfigPromise;
+
+  wechatConfigPromise = (async () => {
+    try {
+      const url = window.location.href.split('#')[0];
+      const response = await fetch('/api/wechat/jssdk-signature', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || '获取微信签名失败');
+      }
+
+      return await new Promise(resolve => {
+        window.wx.config({
+          debug: false,
+          appId: data.appId,
+          timestamp: data.timestamp,
+          nonceStr: data.nonceStr,
+          signature: data.signature,
+          jsApiList: ['updateAppMessageShareData', 'updateTimelineShareData']
+        });
+        window.wx.ready(() => resolve(true));
+        window.wx.error(err => {
+          console.error('wx.config 失败:', err);
+          resolve(false);
+        });
+      });
+    } catch (error) {
+      console.error('初始化微信 JS-SDK 失败:', error);
+      return false;
+    }
+  })();
+
+  return wechatConfigPromise;
+}
+
+function buildShareLink(shareId, title) {
+  const base = `${window.location.origin}${window.location.pathname}?share=${shareId}`;
+  if (!title) return base;
+  return `${base}&title=${encodeURIComponent(title)}`;
+}
+
+async function updateWeChatShare(podcast, shareIdOverride = null) {
+  if (!isWeChat || !window.wx || !podcast) return;
+  const ready = await ensureWeChatConfig();
+  if (!ready) return;
+
+  const shareId = shareIdOverride || podcast.shareId;
+  if (!shareId) return;
+
+  const title = podcast.title || '微信文章转播客';
+  const desc = podcast.summary || '将微信公众号文章转换为双人对话播客音频';
+  const imgUrl = `${window.location.origin}/favicon.png`;
+  const link = buildShareLink(shareId, podcast.title);
+
+  if (window.wx.updateAppMessageShareData) {
+    window.wx.updateAppMessageShareData({ title, desc, link, imgUrl });
+  } else if (window.wx.onMenuShareAppMessage) {
+    window.wx.onMenuShareAppMessage({ title, desc, link, imgUrl });
+  }
+  if (window.wx.updateTimelineShareData) {
+    window.wx.updateTimelineShareData({ title, link, imgUrl });
+  } else if (window.wx.onMenuShareTimeline) {
+    window.wx.onMenuShareTimeline({ title, link, imgUrl });
+  }
 }
 
 // 初始化
@@ -688,6 +763,8 @@ async function playPodcast(id) {
     // 更新列表高亮和按钮状态
     updatePlayingCardState();
 
+    updateWeChatShare(podcast);
+
   } catch (error) {
     console.error('播放失败:', error);
     alert('播放失败: ' + error.message);
@@ -945,9 +1022,7 @@ async function handleShare() {
     showToast('分享暂不可用');
     return;
   }
-  const title = currentPodcastData.title ? currentPodcastData.title : '';
-  const encodedTitle = title ? `&title=${encodeURIComponent(title)}` : '';
-  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareId}${encodedTitle}`;
+  const shareUrl = buildShareLink(shareId, currentPodcastData.title);
 
   try {
     // 优先使用 Clipboard API
@@ -1052,6 +1127,8 @@ async function handleShareLink() {
       audioPlayer.src = `/api/share/${shareId}/audio`;
       playerSection.style.display = 'block';
 
+      updateWeChatShare(podcast, shareId);
+
       // 打开详情页但不自动播放
       openDetail();
 
@@ -1078,6 +1155,8 @@ async function handleShareLink() {
       playerAccount.textContent = podcast.accountName || '微信公众号平台';
       audioPlayer.src = `/api/podcasts/audio/${podcastId}`;
       playerSection.style.display = 'block';
+
+      updateWeChatShare(podcast);
 
       openDetail();
 

@@ -98,6 +98,7 @@ const statusRouter = require('./src/routes/status');
 const podcastRouter = require('./src/routes/podcast');
 const authRouter = require('./src/routes/auth');
 const shareRouter = require('./src/routes/share');
+const wechatRouter = require('./src/routes/wechat');
 const authMiddleware = require('./src/middleware/auth');
 
 // v2.0: 全局 auth 中间件（解析用户身份）
@@ -128,6 +129,9 @@ app.use('/api/auth', authRouter);
 
 // 分享路由（匿名可访问）
 app.use('/api/share', shareRouter);
+
+// 微信 JS-SDK 签名（匿名可访问）
+app.use('/api/wechat', wechatRouter);
 
 // 业务路由
 app.use('/api/article', articleRouter);
