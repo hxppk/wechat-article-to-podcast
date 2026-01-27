@@ -142,4 +142,31 @@ router.post('/jssdk-signature', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/wechat/outbound-ip
+ * 获取服务器出口 IP（用于白名单配置）
+ */
+router.get('/outbound-ip', async (req, res) => {
+  try {
+    const response = await axios.get('https://api.ipify.org', {
+      params: { format: 'json' },
+      timeout: 5000
+    });
+    const ip = response.data && response.data.ip;
+    if (!ip) {
+      return res.status(500).json({
+        error: '无法解析出口 IP',
+        code: 'OUTBOUND_IP_ERROR'
+      });
+    }
+    res.json({ ip });
+  } catch (error) {
+    console.error('获取出口 IP 失败:', error.message);
+    res.status(500).json({
+      error: '获取出口 IP 失败',
+      code: 'OUTBOUND_IP_ERROR'
+    });
+  }
+});
+
 module.exports = router;
