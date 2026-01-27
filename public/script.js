@@ -945,7 +945,9 @@ async function handleShare() {
     showToast('分享暂不可用');
     return;
   }
-  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareId}`;
+  const title = currentPodcastData.title ? currentPodcastData.title : '';
+  const encodedTitle = title ? `&title=${encodeURIComponent(title)}` : '';
+  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareId}${encodedTitle}`;
 
   try {
     // 优先使用 Clipboard API
