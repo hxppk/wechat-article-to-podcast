@@ -75,15 +75,18 @@ function buildShareHtml(req, podcast, shareId) {
     `<meta property="og:description" content="${escapeHtml(description)}">`,
     `<meta property="og:image" content="${escapeHtml(imageUrl)}">`,
     `<meta property="og:url" content="${escapeHtml(shareUrl)}">`,
+    `<meta property="og:site_name" content="微信文章转播客">`,
     `<meta property="og:type" content="website">`,
     `<meta name="description" content="${escapeHtml(description)}">`,
     `<meta itemprop="image" content="${escapeHtml(imageUrl)}">`
   ].join('\n  ');
 
-  if (baseIndexHtml.includes('<head>')) {
-    return baseIndexHtml.replace('<head>', `<head>\n  ${metaTags}`);
+  let html = baseIndexHtml;
+  if (html.includes('<head>')) {
+    html = html.replace('<head>', `<head>\n  ${metaTags}`);
   }
-  return baseIndexHtml;
+  html = html.replace(/<title>[^<]*<\/title>/, `<title>${escapeHtml(title)}</title>`);
+  return html;
 }
 
 // v2.0: 音频通过 /api/podcasts/audio/:id 或 /api/share/:shareId/audio 提供
