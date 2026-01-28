@@ -78,6 +78,7 @@ async function ensureWeChatConfig() {
   wechatConfigPromise = (async () => {
     try {
       const url = window.location.href.split('#')[0];
+      const debugEnabled = new URLSearchParams(window.location.search).has('wxdebug');
       const response = await fetch('/api/wechat/jssdk-signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -90,12 +91,18 @@ async function ensureWeChatConfig() {
 
       return await new Promise(resolve => {
         window.wx.config({
-          debug: false,
+          debug: debugEnabled,
           appId: data.appId,
           timestamp: data.timestamp,
           nonceStr: data.nonceStr,
           signature: data.signature,
-          jsApiList: ['updateAppMessageShareData', 'updateTimelineShareData']
+          jsApiList: [
+            'updateAppMessageShareData',
+            'updateTimelineShareData',
+            'onMenuShareAppMessage',
+            'onMenuShareTimeline',
+            'checkJsApi'
+          ]
         });
         window.wx.ready(() => resolve(true));
         window.wx.error(err => {
@@ -127,20 +134,29 @@ async function updateWeChatShare(podcast, shareIdOverride = null) {
   if (!shareId) return;
 
   const title = podcast.title || '微信文章转播客';
-  const desc = podcast.summary || '将微信公众号文章转换为双人对话播客音频';
+  const rawDesc = podcast.summary || '将微信公众号文章转换为双人对话播客音频';
+  const desc = rawDesc.length > 80 ? `${rawDesc.slice(0, 80)}…` : rawDesc;
   const imgUrl = `${window.location.origin}/favicon.png`;
-  const link = buildShareLink(shareId, podcast.title);
+  const urlParams = new URLSearchParams(window.location.search);
+  const currentShare = urlParams.get('share');
+  const link = currentShare === shareId
+    ? window.location.href.split('#')[0]
+    : buildShareLink(shareId, podcast.title);
 
-  if (window.wx.updateAppMessageShareData) {
-    window.wx.updateAppMessageShareData({ title, desc, link, imgUrl });
-  } else if (window.wx.onMenuShareAppMessage) {
-    window.wx.onMenuShareAppMessage({ title, desc, link, imgUrl });
-  }
-  if (window.wx.updateTimelineShareData) {
-    window.wx.updateTimelineShareData({ title, link, imgUrl });
-  } else if (window.wx.onMenuShareTimeline) {
-    window.wx.onMenuShareTimeline({ title, link, imgUrl });
-  }
+  setTimeout(() => {
+    if (window.wx.updateAppMessageShareData) {
+      window.wx.updateAppMessageShareData({ title, desc, link, imgUrl });
+    }
+    if (window.wx.updateTimelineShareData) {
+      window.wx.updateTimelineShareData({ title, link, imgUrl });
+    }
+    if (window.wx.onMenuShareAppMessage) {
+      window.wx.onMenuShareAppMessage({ title, desc, link, imgUrl });
+    }
+    if (window.wx.onMenuShareTimeline) {
+      window.wx.onMenuShareTimeline({ title, link, imgUrl });
+    }
+  }, 200);
 }
 
 // 初始化
