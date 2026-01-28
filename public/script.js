@@ -58,7 +58,48 @@ let currentUser = null;
 let currentQuota = null;
 let isAuthMode = 'login'; // 'login' | 'register'
 const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
+const wxDebugEnabled = new URLSearchParams(window.location.search).has('wxdebug');
 let wechatConfigPromise = null;
+let wxDebugLogEl = null;
+
+function logWeChatDebug(message) {
+  if (!wxDebugEnabled) return;
+  if (!wxDebugLogEl) {
+    const panel = document.createElement('div');
+    panel.style.cssText = [
+      'position: fixed',
+      'top: 8px',
+      'right: 8px',
+      'z-index: 99999',
+      'max-width: 70vw',
+      'max-height: 60vh',
+      'overflow: auto',
+      'background: rgba(0,0,0,0.75)',
+      'color: #fff',
+      'padding: 10px 12px',
+      'font-size: 12px',
+      'line-height: 1.4',
+      'border-radius: 8px',
+      'white-space: pre-wrap'
+    ].join(';');
+    const title = document.createElement('div');
+    title.textContent = 'WeChat JS-SDK Debug';
+    title.style.fontWeight = '600';
+    title.style.marginBottom = '6px';
+    panel.appendChild(title);
+    const pre = document.createElement('pre');
+    pre.style.margin = '0';
+    panel.appendChild(pre);
+    document.body.appendChild(panel);
+    wxDebugLogEl = pre;
+
+    pre.textContent += `isWeChat=${isWeChat}\n`;
+    pre.textContent += `wxLoaded=${Boolean(window.wx)}\n`;
+    pre.textContent += `ua=${navigator.userAgent}\n`;
+  }
+
+  wxDebugLogEl.textContent += `${message}\n`;
+}
 
 // v2.0: 带认证的 fetch 封装（使用 Cookie，credentials: 'include'）
 async function authFetch(url, options = {}) {
@@ -79,6 +120,7 @@ async function ensureWeChatConfig() {
     try {
       const url = window.location.href.split('#')[0];
       const debugEnabled = new URLSearchParams(window.location.search).has('wxdebug');
+      logWeChatDebug(`signature url=${url}`);
       const response = await fetch('/api/wechat/jssdk-signature', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -86,6 +128,7 @@ async function ensureWeChatConfig() {
       });
       const data = await response.json();
       if (!response.ok) {
+        logWeChatDebug(`signature error=${data.error || response.status}`);
         throw new Error(data.error || '获取微信签名失败');
       }
 
@@ -104,14 +147,27 @@ async function ensureWeChatConfig() {
             'checkJsApi'
           ]
         });
-        window.wx.ready(() => resolve(true));
+        window.wx.ready(() => {
+          logWeChatDebug('wx.ready ok');
+          if (window.wx.checkJsApi) {
+            window.wx.checkJsApi({
+              jsApiList: ['updateAppMessageShareData', 'updateTimelineShareData'],
+              success: result => {
+                logWeChatDebug(`checkJsApi=${JSON.stringify(result)}`);
+              }
+            });
+          }
+          resolve(true);
+        });
         window.wx.error(err => {
           console.error('wx.config 失败:', err);
+          logWeChatDebug(`wx.error=${JSON.stringify(err)}`);
           resolve(false);
         });
       });
     } catch (error) {
       console.error('初始化微信 JS-SDK 失败:', error);
+      logWeChatDebug(`config fail=${error.message}`);
       return false;
     }
   })();
@@ -144,6 +200,9 @@ async function updateWeChatShare(podcast, shareIdOverride = null) {
     : buildShareLink(shareId, podcast.title);
 
   setTimeout(() => {
+    logWeChatDebug(`set share title=${title}`);
+    logWeChatDebug(`set share desc=${desc}`);
+    logWeChatDebug(`set share link=${link}`);
     if (window.wx.updateAppMessageShareData) {
       window.wx.updateAppMessageShareData({ title, desc, link, imgUrl });
     }
