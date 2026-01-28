@@ -57,49 +57,6 @@ let isDetailOpen = false; // 详情页是否打开
 let currentUser = null;
 let currentQuota = null;
 let isAuthMode = 'login'; // 'login' | 'register'
-const isWeChat = /MicroMessenger/i.test(navigator.userAgent);
-const wxDebugEnabled = new URLSearchParams(window.location.search).has('wxdebug');
-let wechatConfigPromise = null;
-let wxDebugLogEl = null;
-
-function logWeChatDebug(message) {
-  if (!wxDebugEnabled) return;
-  if (!wxDebugLogEl) {
-    const panel = document.createElement('div');
-    panel.style.cssText = [
-      'position: fixed',
-      'top: 8px',
-      'right: 8px',
-      'z-index: 99999',
-      'max-width: 70vw',
-      'max-height: 60vh',
-      'overflow: auto',
-      'background: rgba(0,0,0,0.75)',
-      'color: #fff',
-      'padding: 10px 12px',
-      'font-size: 12px',
-      'line-height: 1.4',
-      'border-radius: 8px',
-      'white-space: pre-wrap'
-    ].join(';');
-    const title = document.createElement('div');
-    title.textContent = 'WeChat JS-SDK Debug';
-    title.style.fontWeight = '600';
-    title.style.marginBottom = '6px';
-    panel.appendChild(title);
-    const pre = document.createElement('pre');
-    pre.style.margin = '0';
-    panel.appendChild(pre);
-    document.body.appendChild(panel);
-    wxDebugLogEl = pre;
-
-    pre.textContent += `isWeChat=${isWeChat}\n`;
-    pre.textContent += `wxLoaded=${Boolean(window.wx)}\n`;
-    pre.textContent += `ua=${navigator.userAgent}\n`;
-  }
-
-  wxDebugLogEl.textContent += `${message}\n`;
-}
 
 // v2.0: 带认证的 fetch 封装（使用 Cookie，credentials: 'include'）
 async function authFetch(url, options = {}) {
@@ -109,113 +66,6 @@ async function authFetch(url, options = {}) {
     credentials: 'include',
     headers: { ...defaultHeaders, ...options.headers }
   });
-}
-
-// 微信 JS-SDK 配置
-async function ensureWeChatConfig() {
-  if (!isWeChat || !window.wx) return false;
-  if (wechatConfigPromise) return wechatConfigPromise;
-
-  wechatConfigPromise = (async () => {
-    try {
-      const url = window.location.href.split('#')[0];
-      const debugEnabled = new URLSearchParams(window.location.search).has('wxdebug');
-      logWeChatDebug(`signature url=${url}`);
-      const response = await fetch('/api/wechat/jssdk-signature', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url })
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        logWeChatDebug(`signature error=${data.error || response.status}`);
-        throw new Error(data.error || '获取微信签名失败');
-      }
-
-      return await new Promise(resolve => {
-        window.wx.config({
-          debug: debugEnabled,
-          appId: data.appId,
-          timestamp: data.timestamp,
-          nonceStr: data.nonceStr,
-          signature: data.signature,
-          jsApiList: [
-            'updateAppMessageShareData',
-            'updateTimelineShareData',
-            'onMenuShareAppMessage',
-            'onMenuShareTimeline',
-            'checkJsApi'
-          ]
-        });
-        window.wx.ready(() => {
-          logWeChatDebug('wx.ready ok');
-          if (window.wx.checkJsApi) {
-            window.wx.checkJsApi({
-              jsApiList: ['updateAppMessageShareData', 'updateTimelineShareData'],
-              success: result => {
-                logWeChatDebug(`checkJsApi=${JSON.stringify(result)}`);
-              }
-            });
-          }
-          resolve(true);
-        });
-        window.wx.error(err => {
-          console.error('wx.config 失败:', err);
-          logWeChatDebug(`wx.error=${JSON.stringify(err)}`);
-          resolve(false);
-        });
-      });
-    } catch (error) {
-      console.error('初始化微信 JS-SDK 失败:', error);
-      logWeChatDebug(`config fail=${error.message}`);
-      return false;
-    }
-  })();
-
-  return wechatConfigPromise;
-}
-
-function buildShareLink(shareId, title) {
-  const base = `${window.location.origin}${window.location.pathname}?share=${shareId}`;
-  if (!title) return base;
-  return `${base}&title=${encodeURIComponent(title)}`;
-}
-
-async function updateWeChatShare(podcast, shareIdOverride = null) {
-  if (!isWeChat || !window.wx || !podcast) return;
-  const ready = await ensureWeChatConfig();
-  if (!ready) return;
-
-  const shareId = shareIdOverride || podcast.shareId;
-  if (!shareId) return;
-
-  const title = podcast.title || '微信文章转播客';
-  const rawDesc = podcast.summary || '将微信公众号文章转换为双人对话播客音频';
-  const desc = rawDesc.length > 80 ? `${rawDesc.slice(0, 80)}…` : rawDesc;
-  const imgUrl = `${window.location.origin}/favicon.png`;
-  const urlParams = new URLSearchParams(window.location.search);
-  const currentShare = urlParams.get('share');
-  const link = currentShare === shareId
-    ? window.location.href.split('#')[0]
-    : buildShareLink(shareId, podcast.title);
-
-  setTimeout(() => {
-    logWeChatDebug(`set share title=${title}`);
-    logWeChatDebug(`set share desc=${desc}`);
-    logWeChatDebug(`set share link=${link}`);
-    if (window.wx.updateAppMessageShareData) {
-      window.wx.updateAppMessageShareData({ title, desc, link, imgUrl });
-    }
-    if (window.wx.updateTimelineShareData) {
-      window.wx.updateTimelineShareData({ title, link, imgUrl });
-    }
-    if (window.wx.onMenuShareAppMessage) {
-      window.wx.onMenuShareAppMessage({ title, desc, link, imgUrl });
-    }
-    if (window.wx.onMenuShareTimeline) {
-      window.wx.onMenuShareTimeline({ title, link, imgUrl });
-    }
-  }, 200);
 }
 
 // 初始化
@@ -838,8 +688,6 @@ async function playPodcast(id) {
     // 更新列表高亮和按钮状态
     updatePlayingCardState();
 
-    updateWeChatShare(podcast);
-
   } catch (error) {
     console.error('播放失败:', error);
     alert('播放失败: ' + error.message);
@@ -1097,7 +945,7 @@ async function handleShare() {
     showToast('分享暂不可用');
     return;
   }
-  const shareUrl = buildShareLink(shareId, currentPodcastData.title);
+  const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareId}`;
 
   try {
     // 优先使用 Clipboard API
@@ -1202,8 +1050,6 @@ async function handleShareLink() {
       audioPlayer.src = `/api/share/${shareId}/audio`;
       playerSection.style.display = 'block';
 
-      updateWeChatShare(podcast, shareId);
-
       // 打开详情页但不自动播放
       openDetail();
 
@@ -1230,8 +1076,6 @@ async function handleShareLink() {
       playerAccount.textContent = podcast.accountName || '微信公众号平台';
       audioPlayer.src = `/api/podcasts/audio/${podcastId}`;
       playerSection.style.display = 'block';
-
-      updateWeChatShare(podcast);
 
       openDetail();
 

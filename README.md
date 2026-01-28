@@ -35,8 +35,6 @@ cp .env.example .env
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key
-WECHAT_APP_ID=your_wechat_app_id
-WECHAT_APP_SECRET=your_wechat_app_secret
 HTTP_PROXY=http://127.0.0.1:7890  # 可选，代理设置
 ```
 
@@ -66,7 +64,6 @@ npm start
 | GET | `/api/podcasts/:id` | 获取单个播客详情 |
 | DELETE | `/api/podcasts/:id` | 删除播客 |
 | GET | `/audio/:id.mp3` | 获取音频文件 |
-| POST | `/api/wechat/jssdk-signature` | 获取微信 JS-SDK 签名 |
 
 ## 目录结构
 
@@ -104,8 +101,6 @@ npm start
 | 变量 | 必填 | 说明 |
 |------|------|------|
 | `GEMINI_API_KEY` | 是 | Google Gemini API 密钥 |
-| `WECHAT_APP_ID` | 否 | 公众号 AppID（微信内分享卡片） |
-| `WECHAT_APP_SECRET` | 否 | 公众号 AppSecret（微信内分享卡片） |
 | `HTTP_PROXY` | 否 | HTTP 代理地址 |
 | `HTTPS_PROXY` | 否 | HTTPS 代理地址 |
 | `PORT` | 否 | 服务端口，默认 3000 |
