@@ -13,7 +13,7 @@ class GeminiLLM extends LLMProvider {
     }
     this.genAI = new GoogleGenerativeAI(apiKey);
     this.model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-3-flash-preview',
       generationConfig: {
         temperature: 0.8,
         topP: 0.95,
