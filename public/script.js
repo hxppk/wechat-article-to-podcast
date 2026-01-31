@@ -58,9 +58,41 @@ let currentUser = null;
 let currentQuota = null;
 let isAuthMode = 'login'; // 'login' | 'register'
 
+// 本地存储的认证 Token（用于 Cookie 不可用时的降级）
+const AUTH_TOKEN_KEY = 'authToken';
+
+function getAuthToken() {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch (e) {
+    return null;
+  }
+}
+
+function setAuthToken(token) {
+  if (!token) return;
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, token);
+  } catch (e) {
+    // 忽略存储失败（例如隐私模式）
+  }
+}
+
+function clearAuthToken() {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch (e) {
+    // ignore
+  }
+}
+
 // v2.0: 带认证的 fetch 封装（使用 Cookie，credentials: 'include'）
 async function authFetch(url, options = {}) {
-  const defaultHeaders = { 'Content-Type': 'application/json' };
+  const token = getAuthToken();
+  const defaultHeaders = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {})
+  };
   return fetch(url, {
     ...options,
     credentials: 'include',
@@ -89,6 +121,9 @@ async function checkAuthStatus() {
       updateUserUI();
     } else {
       // 未登录
+      if (response.status === 401) {
+        clearAuthToken();
+      }
       currentUser = null;
       updateUserUI();
     }
@@ -226,6 +261,9 @@ async function handleAuthSubmit(event) {
 
     // 成功
     currentUser = data.user;
+    if (data.token) {
+      setAuthToken(data.token);
+    }
     closeAuthModal();
     await checkAuthStatus(); // 刷新配额信息
     loadPodcasts(); // 刷新播客列表
@@ -246,6 +284,7 @@ async function handleLogout() {
     await authFetch('/api/auth/logout', { method: 'POST' });
     currentUser = null;
     currentQuota = null;
+    clearAuthToken();
     updateUserUI();
     loadPodcasts();
     showToast('已退出登录');

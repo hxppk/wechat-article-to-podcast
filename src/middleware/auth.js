@@ -36,21 +36,38 @@ function authMiddleware(req, res, next) {
     }
   }
 
-  // 2. 降级兼容 v1.5：Authorization: Bearer <userId>
+  // 2. 降级兼容：Authorization: Bearer <JWT> 或 <userId>
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    const userId = authHeader.slice(7).trim();
-    if (userId && /^[a-zA-Z0-9_-]+$/.test(userId)) {
-      // 如果是已注册用户，获取其 tier
-      const user = users.findById(userId);
+    const bearer = authHeader.slice(7).trim();
+
+    // 2.1 尝试按 JWT 解析
+    if (bearer) {
+      try {
+        const decoded = jwt.verify(bearer, JWT_SECRET);
+        if (decoded.userId) {
+          const user = users.findById(decoded.userId);
+          if (user) {
+            req.userId = user.id;
+            req.userTier = user.tier;
+            return next();
+          }
+        }
+      } catch (e) {
+        // JWT 不可用则继续尝试 userId 降级
+      }
+    }
+
+    // 2.2 降级兼容 v1.5：Authorization: Bearer <userId>
+    if (bearer && /^[a-zA-Z0-9_-]+$/.test(bearer)) {
+      const user = users.findById(bearer);
       if (user) {
         req.userId = user.id;
         req.userTier = user.tier;
-      } else if (userId === 'public') {
+      } else if (bearer === 'public') {
         req.userId = 'public';
         req.userTier = 'guest';
       } else {
-        // 未知用户按 public 处理
         req.userId = 'public';
         req.userTier = 'guest';
       }
