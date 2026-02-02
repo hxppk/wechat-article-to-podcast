@@ -93,11 +93,21 @@ async function authFetch(url, options = {}) {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {})
   };
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     credentials: 'include',
     headers: { ...defaultHeaders, ...options.headers }
   });
+
+  // 认证失效时自动清除 token 并提示重新登录
+  if (response.status === 401) {
+    clearAuthToken();
+    currentUser = null;
+    updateUserUI();
+    openAuthModal('login');
+  }
+
+  return response;
 }
 
 // 初始化
@@ -432,6 +442,12 @@ function playNext() {
 
 // 提交转换
 async function handleConvert() {
+  // 未登录时直接弹出登录框
+  if (!currentUser) {
+    openAuthModal('login');
+    return;
+  }
+
   const url = articleUrlInput.value.trim();
 
   if (!url) {
