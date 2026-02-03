@@ -60,6 +60,8 @@ let isAuthMode = 'login'; // 'login' | 'register'
 
 // 本地存储的认证 Token（用于 Cookie 不可用时的降级）
 const AUTH_TOKEN_KEY = 'authToken';
+const urlParams = new URLSearchParams(window.location.search);
+const isShareMode = urlParams.has('share') || urlParams.has('podcast');
 
 function getAuthToken() {
   try {
@@ -88,15 +90,16 @@ function clearAuthToken() {
 
 // v2.0: 带认证的 fetch 封装（使用 Cookie，credentials: 'include'）
 async function authFetch(url, options = {}) {
+  const { suppressAuthModal, ...fetchOptions } = options;
   const token = getAuthToken();
   const defaultHeaders = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {})
   };
   const response = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     credentials: 'include',
-    headers: { ...defaultHeaders, ...options.headers }
+    headers: { ...defaultHeaders, ...fetchOptions.headers }
   });
 
   // 认证失效时自动清除 token 并提示重新登录
@@ -104,7 +107,9 @@ async function authFetch(url, options = {}) {
     clearAuthToken();
     currentUser = null;
     updateUserUI();
-    openAuthModal('login');
+    if (!suppressAuthModal) {
+      openAuthModal('login');
+    }
   }
 
   return response;
@@ -123,7 +128,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 检查登录状态
 async function checkAuthStatus() {
   try {
-    const response = await authFetch('/api/auth/me');
+    const response = await authFetch('/api/auth/me', { suppressAuthModal: isShareMode });
     if (response.ok) {
       const data = await response.json();
       currentUser = data.user;
@@ -1079,7 +1084,6 @@ function syncDetailSpeedDisplay(speedValue) {
 
 // 处理分享链接
 async function handleShareLink() {
-  const urlParams = new URLSearchParams(window.location.search);
   const shareId = urlParams.get('share');
   const podcastId = urlParams.get('podcast'); // 兼容旧链接
 
