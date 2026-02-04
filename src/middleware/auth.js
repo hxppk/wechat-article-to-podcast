@@ -28,18 +28,11 @@ function authMiddleware(req, res, next) {
         if (user) {
           req.userId = user.id;
           req.userTier = user.tier;
-          // 🔍 调试日志
-          if (req.path === '/api/podcasts' || req.path.startsWith('/api/podcasts')) {
-            console.log(`[auth] ✅ Cookie认证成功 - userId: ${user.id}, path: ${req.path}`);
-          }
           return next();
-        } else {
-          console.log(`[auth] ⚠️ Cookie JWT有效但用户不存在 - decodedId: ${decoded.userId}`);
         }
       }
     } catch (e) {
-      // 🔍 调试日志
-      console.log(`[auth] ⚠️ Cookie JWT验证失败: ${e.message}`);
+      // Token 无效或过期，继续降级
     }
   }
 
@@ -71,24 +64,14 @@ function authMiddleware(req, res, next) {
       if (user) {
         req.userId = user.id;
         req.userTier = user.tier;
-        // 🔍 调试日志
-        if (req.path === '/api/podcasts' || req.path.startsWith('/api/podcasts')) {
-          console.log(`[auth] ✅ Bearer userId认证成功 - userId: ${user.id}`);
-        }
       } else if (bearer === 'public') {
         req.userId = 'public';
         req.userTier = 'guest';
       } else {
         req.userId = 'public';
         req.userTier = 'guest';
-        console.log(`[auth] ⚠️ Bearer token无效，用户不存在: ${bearer.substring(0, 20)}...`);
       }
     }
-  }
-
-  // 🔍 调试日志：最终结果
-  if ((req.path === '/api/podcasts' || req.path.startsWith('/api/podcasts')) && req.userId === 'public') {
-    console.log(`[auth] ❌ 认证失败，回退到 public - cookie: ${!!token}, authHeader: ${!!authHeader}`);
   }
 
   next();
