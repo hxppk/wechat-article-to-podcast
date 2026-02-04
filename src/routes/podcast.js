@@ -14,7 +14,16 @@ const podcasts = require('../db/podcasts');
  * 获取当前用户的播客列表
  */
 router.get('/', (req, res) => {
+  // 🔍 调试日志：追踪用户认证
+  console.log(`[podcasts] GET /api/podcasts - userId: ${req.userId}, tier: ${req.userTier}, cookie: ${!!req.cookies?.token}, auth: ${!!req.headers.authorization}`);
+  
   const list = podcasts.findByUserId(req.userId);
+  
+  // 🔍 调试日志：查询结果
+  if (list.length === 0 && req.userId !== 'public') {
+    console.log(`[podcasts] ⚠️ 用户 ${req.userId} 播客列表为空，检查数据库是否有该用户的数据`);
+  }
+  
   res.json({
     success: true,
     count: list.length,
