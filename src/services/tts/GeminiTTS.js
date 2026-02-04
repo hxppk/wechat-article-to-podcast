@@ -6,6 +6,17 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 const TTSProvider = require('./TTSProvider');
 
+// 🔧 修复 Zeabur 环境下的 fetch 问题
+// 使用 node-fetch 替代可能有问题的内置 fetch
+const nodeFetch = require('node-fetch');
+if (!globalThis.fetch) {
+  globalThis.fetch = nodeFetch;
+  globalThis.Headers = nodeFetch.Headers;
+  globalThis.Request = nodeFetch.Request;
+  globalThis.Response = nodeFetch.Response;
+  console.log('TTS 模块: 使用 node-fetch 作为全局 fetch');
+}
+
 // 确保代理对 @google/genai 的 fetch 生效
 if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
   const { ProxyAgent, setGlobalDispatcher } = require('undici');
