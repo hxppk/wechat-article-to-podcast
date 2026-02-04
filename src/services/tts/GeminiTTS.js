@@ -71,6 +71,10 @@ const RETRY_CONFIG = {
   maxDelayMs: 60000  // 增加最大延迟
 };
 
+// Gemini TTS 长文本合成可能耗时较长，@google/genai 默认超时较短（约 1 分钟）。
+// 这里把单次 API 调用的 HTTP 超时设置为更长时间（默认 10 分钟）。
+const GEMINI_TTS_HTTP_TIMEOUT_MS = 10 * 60 * 1000;
+
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 function isRawPcmMimeType(mimeType) {
@@ -162,6 +166,9 @@ class GeminiTTS extends TTSProvider {
           model: 'gemini-2.5-pro-preview-tts',
           contents: [{ parts: [{ text }] }],
           config: {
+            httpOptions: {
+              timeout: GEMINI_TTS_HTTP_TIMEOUT_MS
+            },
             responseModalities: ['AUDIO'],
             speechConfig: {
               multiSpeakerVoiceConfig: {
