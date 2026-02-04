@@ -83,6 +83,42 @@ function isRawPcmMimeType(mimeType) {
   return lower.includes('audio/l16') || lower.includes('pcm');
 }
 
+// 分段配置：当对话文本（不含 style prompt）超过 1000 字符时，自动分段合成
+const DIALOGUE_SEGMENT_CONFIG = {
+  minChars: 800,
+  softMaxChars: 950, // 留余量，尽量把每段控制在 800~1000 之间
+  hardMaxChars: 1000
+};
+
+// 分段合成时固定使用同一套 speakers 配置（Charon + Callirrhoe）
+const FIXED_SPEAKERS = [
+  { speaker: 'Speaker_A', voiceName: 'Charon' },
+  { speaker: 'Speaker_B', voiceName: 'Callirrhoe' }
+];
+
+function normalizeSpeaker(rawSpeaker) {
+  const speaker = typeof rawSpeaker === 'string' ? rawSpeaker.trim() : '';
+  return speaker
+    .replace(/^speaker_/i, 'Speaker_')
+    .replace(/^Speaker_([ab])$/i, (_, letter) => `Speaker_${letter.toUpperCase()}`);
+}
+
+function getSpeakerConfig(rawSpeaker) {
+  const normalizedSpeaker = normalizeSpeaker(rawSpeaker);
+  return SPEAKER_VOICE_MAP[normalizedSpeaker] ||
+    SPEAKER_VOICE_MAP[rawSpeaker] ||
+    SPEAKER_VOICE_MAP['A'];
+}
+
+function formatDialogueLine(dialogue) {
+  const config = getSpeakerConfig(dialogue?.speaker);
+  let text = dialogue?.text ?? '';
+  if (dialogue?.isInterrupt) {
+    text = text + '--';
+  }
+  return `${config.speakerName}: ${text}`;
+}
+
 /**
  * Gemini TTS 实现
  * 使用 Gemini 2.5 Pro Preview TTS 的原生多角色功能，一次 API 调用生成完整音频
@@ -118,12 +154,7 @@ class GeminiTTS extends TTSProvider {
 
     for (const dialogue of dialogues) {
       const rawSpeaker = typeof dialogue.speaker === 'string' ? dialogue.speaker.trim() : '';
-      const normalizedSpeaker = rawSpeaker
-        .replace(/^speaker_/i, 'Speaker_')
-        .replace(/^Speaker_([ab])$/i, (_, letter) => `Speaker_${letter.toUpperCase()}`);
-      const config = SPEAKER_VOICE_MAP[normalizedSpeaker] ||
-        SPEAKER_VOICE_MAP[rawSpeaker] ||
-        SPEAKER_VOICE_MAP['A'];
+      const config = getSpeakerConfig(rawSpeaker);
       const speakerName = config.speakerName;
 
       // 记录使用的角色
@@ -131,13 +162,7 @@ class GeminiTTS extends TTSProvider {
         usedSpeakers.set(speakerName, config.voiceName);
       }
 
-      // 格式化为 "Speaker_X: 文本" 格式
-      // 如果是插嘴场景，保留 -- 标记影响 TTS 节奏
-      let text = dialogue.text;
-      if (dialogue.isInterrupt) {
-        text = text + '--';
-      }
-      lines.push(`${speakerName}: ${text}`);
+      lines.push(formatDialogueLine(dialogue));
     }
 
     // 构建 speakers 配置
@@ -230,6 +255,95 @@ class GeminiTTS extends TTSProvider {
   }
 
   /**
+   * 计算对话文本长度（不包含 style prompt）
+   * - 按 convertToMultiSpeakerFormat 的实际行格式估算
+   */
+  getDialoguesTextLength(dialogues) {
+    if (!Array.isArray(dialogues) || dialogues.length === 0) return 0;
+    let total = 0;
+    for (const dialogue of dialogues) {
+      const line = formatDialogueLine(dialogue);
+      if (total > 0) total += 1; // '\n'
+      total += line.length;
+    }
+    return total;
+  }
+
+  /**
+   * 将对话按段落分段（不切断单个对话）
+   * - 目标每段 800~1000 字符（不含 style prompt）
+   * - 优先在完整对话之间切割
+   * - 若单个对话超过 1000 字符，则单独作为一段
+   */
+  splitDialoguesIntoSegments(dialogues) {
+    if (!Array.isArray(dialogues) || dialogues.length === 0) return [];
+
+    const totalLen = this.getDialoguesTextLength(dialogues);
+    if (totalLen <= DIALOGUE_SEGMENT_CONFIG.hardMaxChars) {
+      return [dialogues];
+    }
+
+    const segments = [];
+    let current = [];
+    let currentLen = 0;
+
+    const pushCurrent = () => {
+      if (current.length > 0) {
+        segments.push(current);
+        current = [];
+        currentLen = 0;
+      }
+    };
+
+    for (const dialogue of dialogues) {
+      const line = formatDialogueLine(dialogue);
+      const lineLen = line.length;
+
+      // 单个对话超长：直接单独一段（不切断）
+      if (lineLen > DIALOGUE_SEGMENT_CONFIG.hardMaxChars) {
+        pushCurrent();
+        segments.push([dialogue]);
+        continue;
+      }
+
+      if (current.length === 0) {
+        current.push(dialogue);
+        currentLen = lineLen;
+        continue;
+      }
+
+      const additionalLen = 1 + lineLen; // '\n' + line
+      const nextLen = currentLen + additionalLen;
+      const wouldExceedHard = nextLen > DIALOGUE_SEGMENT_CONFIG.hardMaxChars;
+      const wouldExceedSoft = nextLen > DIALOGUE_SEGMENT_CONFIG.softMaxChars;
+
+      if (wouldExceedHard || (currentLen >= DIALOGUE_SEGMENT_CONFIG.minChars && wouldExceedSoft)) {
+        pushCurrent();
+        current.push(dialogue);
+        currentLen = lineLen;
+        continue;
+      }
+
+      current.push(dialogue);
+      currentLen = nextLen;
+    }
+
+    pushCurrent();
+    return segments;
+  }
+
+  async convertToMp3(tempAudioPath, mimeType, outputPath) {
+    const needsRawInput = isRawPcmMimeType(mimeType);
+    const ffmpegInput = needsRawInput
+      ? `-f s16le -ar 24000 -ac 1 -i "${tempAudioPath}"`
+      : `-i "${tempAudioPath}"`;
+
+    await execAsync(
+      `ffmpeg -y ${ffmpegInput} -codec:a libmp3lame -qscale:a 2 "${outputPath}"`
+    );
+  }
+
+  /**
    * 合成完整播客 - 一次性生成完整音频
    * @param {Array<{speaker: string, text: string, isInterrupt?: boolean}>} dialogues
    * @param {string} outputPath
@@ -241,35 +355,90 @@ class GeminiTTS extends TTSProvider {
     }
 
     const stylePrompt = options.stylePrompt || DEFAULT_STYLE_PROMPT;
-    const { text, speakers } = this.convertToMultiSpeakerFormat(dialogues, stylePrompt);
-    console.log(`开始合成 ${dialogues.length} 段对话（一次性生成）...`);
-    console.log(`  - 文本长度: ${text.length} 字符`);
+    const dialogueTextLength = this.getDialoguesTextLength(dialogues);
+    const segments = this.splitDialoguesIntoSegments(dialogues);
 
-    const tempDir = path.dirname(outputPath);
-    const taskId = path.basename(outputPath, '.mp3');
-    const tempAudioPath = path.join(tempDir, `${taskId}_raw.bin`);
+    console.log(`开始合成 ${dialogues.length} 段对话...`);
+    console.log(`  - 对话文本长度(不含 style prompt): ${dialogueTextLength} 字符`);
+    console.log(`  - 分段数量: ${segments.length}`);
 
     try {
-      const { mimeType } = await this.synthesizeWithRetry(text, speakers, tempAudioPath);
-      const needsRawInput = isRawPcmMimeType(mimeType);
-      const ffmpegInput = needsRawInput
-        ? `-f s16le -ar 24000 -ac 1 -i "${tempAudioPath}"`
-        : `-i "${tempAudioPath}"`;
+      // 单段：沿用原流程（一次 API 调用 + 转 MP3）
+      if (segments.length <= 1) {
+        const { text } = this.convertToMultiSpeakerFormat(dialogues, stylePrompt);
+        console.log('  - 模式: 单段合成');
+        console.log(`  - 输入总长度(含 style prompt): ${text.length} 字符`);
 
-      console.log('正在转换为 MP3 格式...');
-      await execAsync(
-        `ffmpeg -y ${ffmpegInput} -codec:a libmp3lame -qscale:a 2 "${outputPath}"`
-      );
-      console.log(`音频已保存: ${outputPath}`);
+        const tempDir = path.dirname(outputPath);
+        const taskId = path.basename(outputPath, '.mp3');
+        const tempAudioPath = path.join(tempDir, `${taskId}_raw.bin`);
+
+        try {
+          const { mimeType } = await this.synthesizeWithRetry(text, FIXED_SPEAKERS, tempAudioPath);
+          console.log('正在转换为 MP3 格式...');
+          await this.convertToMp3(tempAudioPath, mimeType, outputPath);
+          console.log(`音频已保存: ${outputPath}`);
+        } finally {
+          try {
+            if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
+          } catch (e) { /* ignore */ }
+        }
+
+        return;
+      }
+
+      // 多段：每段独立调用 API，然后用 ffmpeg concat 拼接
+      console.log('  - 模式: 分段合成 + 拼接');
+      const tempDir = path.dirname(outputPath);
+      const taskId = path.basename(outputPath, '.mp3');
+      const workDir = fs.mkdtempSync(path.join(tempDir, `${taskId}_tts_`));
+
+      const segmentMp3Files = [];
+      try {
+        for (let i = 0; i < segments.length; i++) {
+          const segmentDialogues = segments[i];
+          const segmentIndex = String(i + 1).padStart(4, '0');
+          const rawPath = path.join(workDir, `segment_${segmentIndex}.bin`);
+          const mp3Path = path.join(workDir, `segment_${segmentIndex}.mp3`);
+
+          const segmentDialogueLen = this.getDialoguesTextLength(segmentDialogues);
+          const { text } = this.convertToMultiSpeakerFormat(segmentDialogues, stylePrompt);
+
+          console.log(`正在合成分段 ${i + 1}/${segments.length}...`);
+          console.log(`  - 分段对话长度(不含 style prompt): ${segmentDialogueLen} 字符`);
+
+          const { mimeType } = await this.synthesizeWithRetry(text, FIXED_SPEAKERS, rawPath);
+          await this.convertToMp3(rawPath, mimeType, mp3Path);
+
+          segmentMp3Files.push(mp3Path);
+
+          try {
+            if (fs.existsSync(rawPath)) fs.unlinkSync(rawPath);
+          } catch (e) { /* ignore */ }
+        }
+
+        const concatListPath = path.join(workDir, 'concat.txt');
+        const concatListContent = segmentMp3Files
+          .map(p => `file '${path.basename(p)}'`)
+          .join('\n') + '\n';
+        fs.writeFileSync(concatListPath, concatListContent);
+
+        console.log('正在使用 ffmpeg concat 拼接 MP3...');
+        await execAsync(
+          `ffmpeg -y -f concat -safe 0 -i "${concatListPath}" -c copy "${outputPath}"`
+        );
+
+        console.log(`音频已保存: ${outputPath}`);
+      } finally {
+        try {
+          if (fs.existsSync(workDir)) fs.rmSync(workDir, { recursive: true, force: true });
+        } catch (e) { /* ignore */ }
+      }
     } catch (error) {
       if (error.message.includes('fetch failed')) {
         throw new Error('语音合成网络连接失败，请检查网络或代理设置后重试');
       }
       throw new Error(`语音合成失败: ${error.message}`);
-    } finally {
-      try {
-        if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath);
-      } catch (e) { /* ignore */ }
     }
   }
 }
