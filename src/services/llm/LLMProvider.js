@@ -79,6 +79,19 @@ class LLMProvider {
      * Speaker_B: 等等，你说的是那个分布式的吗？
    - 正常轮换（对方说完了再接）不需要 --。
 
+6. 韵律标记 (Prosody Markers for TTS):
+   - 可使用的标记：(laughs) (chuckle) (sighs) (breath) (emm) (gasps)
+   - 规则：
+     a. 整篇脚本中韵律标记总数不超过 8-10 个
+     b. 不要连续两句都有标记
+     c. 标记放在标点符号之后："对！(laughs)这个比喻太妙了"
+     d. Speaker_A 适合：(chuckle) (sighs) (breath) (emm)
+     e. Speaker_B 适合：(laughs) (gasps) (emm)
+     f. 用韵律标记替代中文拟声词，不要同时出现
+        Bad: "哈哈(laughs)这太逗了"
+        Good: "(laughs)这太逗了"
+     g. 长停顿用 <#0.5#> 格式（秒数，不超过 1.0）
+
 # Output Format Example
 Speaker_B: 哎老王，我今天看了这个材料，有个地儿我没太看懂。
 Speaker_A: 你是说那个...关于架构的部分？

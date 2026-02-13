@@ -130,13 +130,16 @@ class TaskQueue {
    * 创建任务
    * @param {string} articleUrl - 微信文章 URL
    * @param {string} userId - 用户 ID（v1.5 新增）
+   * @param {Object} options - 可选参数
+   * @param {string} options.ttsProvider - TTS 供应商 (minimax | gemini)
    */
-  createTask(articleUrl, userId = 'public') {
+  createTask(articleUrl, userId = 'public', options = {}) {
     const task = {
       id: uuid(),
       status: 'pending',
       articleUrl,
       userId,           // v1.5 新增
+      ttsProvider: options.ttsProvider || 'minimax',
       title: null,
       accountName: null,
       createdAt: Date.now(),
@@ -233,9 +236,10 @@ class TaskQueue {
 
     // Stage 3: 合成语音
     this.updateStatus(taskId, 'synthesizing');
-    console.log(`[${taskId}] 使用 ${this.tts.getName()} 合成音频...`);
+    const tts = this.getTTSInstance(task.ttsProvider);
+    console.log(`[${taskId}] 使用 ${tts.getName()} 合成音频...`);
     const audioPath = path.join(audioDir, `${taskId}.mp3`);
-    await this.tts.synthesize(script.dialogues, audioPath);
+    await tts.synthesize(script.dialogues, audioPath);
 
     // 获取文件大小和时长信息
     const stat = fs.statSync(audioPath);
@@ -260,6 +264,24 @@ class TaskQueue {
     // 完成
     this.updateStatus(taskId, 'completed');
     console.log(`[${taskId}] 处理完成`);
+  }
+
+  /**
+   * 按名称创建 TTS Provider 实例
+   * @param {string} name - Provider 名称 (minimax | gemini)
+   * @returns {TTSProvider}
+   */
+  getTTSInstance(name) {
+    const GeminiTTS = require('./tts/GeminiTTS');
+    const MiniMaxTTS = require('./tts/MiniMaxTTS');
+
+    switch ((name || 'minimax').toLowerCase()) {
+      case 'gemini':
+        return new GeminiTTS();
+      case 'minimax':
+      default:
+        return new MiniMaxTTS();
+    }
   }
 
   updateStatus(taskId, status, error = null) {

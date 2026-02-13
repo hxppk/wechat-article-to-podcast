@@ -16,7 +16,7 @@ const { requireAuth } = require('../middleware/auth');
  * v2.0: 需要登录 + 检查配额
  */
 router.post('/', requireAuth, quotaMiddleware, async (req, res) => {
-  const { url } = req.body;
+  const { url, ttsProvider } = req.body;
 
   // 验证 URL
   try {
@@ -32,7 +32,7 @@ router.post('/', requireAuth, quotaMiddleware, async (req, res) => {
   }
 
   // 创建任务（v1.5: 传入 userId）
-  const taskId = taskQueue.createTask(url, req.userId);
+  const taskId = taskQueue.createTask(url, req.userId, { ttsProvider });
 
   res.json({
     success: true,
