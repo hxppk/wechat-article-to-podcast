@@ -59,6 +59,29 @@ test('convertProsodyForElevenLabs 不影响中文全角括号', () => {
   assert.equal(convertProsodyForElevenLabs('这是（重点）'), '这是（重点）');
 });
 
+test('convertProsodyForElevenLabs 非白名单半角括号保留原样', () => {
+  // 数字、英文缩写、中文拟声词均不在白名单中，不应被转换
+  assert.equal(convertProsodyForElevenLabs('发布于(2024)年'), '发布于(2024)年');
+  assert.equal(convertProsodyForElevenLabs('调用了(API)接口'), '调用了(API)接口');
+  assert.equal(convertProsodyForElevenLabs('他说(咳咳)不好意思'), '他说(咳咳)不好意思');
+});
+
+test('convertProsodyForElevenLabs 全部白名单韵律词均转换', () => {
+  // 验证白名单中各代表词都被转换
+  assert.equal(convertProsodyForElevenLabs('(laughs)'), '[laughs]');
+  assert.equal(convertProsodyForElevenLabs('(sighs)'), '[sighs]');
+  assert.equal(convertProsodyForElevenLabs('(breath)'), '[breath]');
+  assert.equal(convertProsodyForElevenLabs('(emm)'), '[emm]');
+  assert.equal(convertProsodyForElevenLabs('(gasps)'), '[gasps]');
+  assert.equal(convertProsodyForElevenLabs('(groans)'), '[groans]');
+});
+
+test('convertProsodyForElevenLabs 混合场景：白名单转换 + 非白名单保留 + 停顿删除', () => {
+  const input = '见到你(laughs)很高兴，版本(2024)<#0.5#>已更新';
+  const expected = '见到你[laughs]很高兴，版本(2024)已更新';
+  assert.equal(convertProsodyForElevenLabs(input), expected);
+});
+
 test('buildDialogueInputs 把圆括号韵律标记转成方括号', () => {
   const inputs = buildDialogueInputs([{ speaker: 'Speaker_A', text: '哈哈(chuckle)好吧' }], VOICES);
   assert.equal(inputs[0].text, '哈哈[chuckle]好吧');

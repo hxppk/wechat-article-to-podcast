@@ -12,12 +12,12 @@ class TTSProvider {
   }
 
   /**
-   * 将对话脚本合成为音频
-   * @param {string} script - 对话脚本文本
+   * 将对话数组合成为音频文件
+   * @param {Array<{speaker: string, text: string, isInterrupt?: boolean}>} dialogues - 对话数组
    * @param {string} outputPath - 输出音频文件路径
    * @returns {Promise<void>}
    */
-  async synthesize(script, outputPath) {
+  async synthesize(dialogues, outputPath) {
     throw new Error('子类必须实现 synthesize 方法');
   }
 }

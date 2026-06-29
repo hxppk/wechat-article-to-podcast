@@ -120,9 +120,8 @@ class TaskQueue {
     this.maxConcurrent = parseInt(process.env.MAX_CONCURRENT_TASKS) || maxConcurrent;
     this.queue = [];
 
-    // LLM 和 TTS 服务（延迟加载）
+    // LLM 服务（延迟加载）；TTS 按任务动态选取，见 getTTSInstance()
     this.llm = null;
-    this.tts = null;
   }
 
   /**
@@ -132,10 +131,6 @@ class TaskQueue {
     if (!this.llm) {
       const llmModule = require('./llm');
       this.llm = llmModule.default || llmModule;
-    }
-    if (!this.tts) {
-      const ttsModule = require('./tts');
-      this.tts = ttsModule.default || ttsModule;
     }
   }
 

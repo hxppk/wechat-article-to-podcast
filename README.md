@@ -5,8 +5,8 @@
 ## 功能特性
 
 - **微信文章提取**：使用 Puppeteer 无头浏览器渲染，支持动态加载内容
-- **AI 脚本生成**：Gemini 2.0 Flash 将文章改写为自然对话脚本
-- **多人语音合成**：Gemini TTS 多说话人模式，一次生成完整音频
+- **AI 脚本生成**：Claude（`claude -p`）将文章改写为自然对话脚本
+- **多人语音合成**：MiniMax Speech-2.8-HD（默认）或 ElevenLabs（可选），逐轮合成 + FFmpeg 拼接
 - **Web 界面**：简洁的前端，支持播客列表、在线播放、下载
 - **任务队列**：异步处理，支持并发，自动重试
 
@@ -14,10 +14,17 @@
 
 - **后端**：Node.js + Express
 - **文章提取**：Puppeteer
-- **AI 服务**：Google Gemini API (LLM + TTS)
+- **AI 服务**：Claude CLI（脚本生成）+ MiniMax / ElevenLabs（语音合成）
 - **前端**：原生 HTML/CSS/JS
 
 ## 快速开始
+
+### 前置条件
+
+脚本生成依赖 Claude Code CLI：
+
+- **方式一（推荐）**：在部署机上安装并登录 Claude Code CLI（`npm install -g @anthropic-ai/claude-code` 后执行 `claude` 完成 OAuth 登录）。
+- **方式二**：设置 `CLAUDE_ALLOW_API_KEY=1` 并提供 `ANTHROPIC_API_KEY`，通过 API Key 鉴权。
 
 ### 1. 安装依赖
 
@@ -34,7 +41,14 @@ cp .env.example .env
 编辑 `.env` 文件，填入你的配置：
 
 ```env
-GEMINI_API_KEY=your_gemini_api_key
+# 语音合成（至少配一个）
+MINIMAX_API_KEY=your_minimax_api_key       # 默认 TTS
+ELEVENLABS_API_KEY=your_elevenlabs_api_key # 可选，按任务选择
+
+# Claude CLI（若使用 API Key 模式）
+# CLAUDE_ALLOW_API_KEY=1
+# ANTHROPIC_API_KEY=your_anthropic_api_key
+
 HTTP_PROXY=http://127.0.0.1:7890  # 可选，代理设置
 ```
 
@@ -50,9 +64,10 @@ npm start
 
 1. 打开浏览器访问 http://localhost:3000
 2. 粘贴微信公众号文章链接
-3. 点击"转换"按钮
-4. 等待处理完成（约 1-2 分钟）
-5. 在播客列表中播放或下载
+3. 选择 TTS 提供商（MiniMax 或 ElevenLabs）
+4. 点击"转换"按钮
+5. 等待处理完成（约 1-2 分钟）
+6. 在播客列表中播放或下载
 
 ## API 接口
 
@@ -63,7 +78,7 @@ npm start
 | GET | `/api/podcasts` | 获取播客列表 |
 | GET | `/api/podcasts/:id` | 获取单个播客详情 |
 | DELETE | `/api/podcasts/:id` | 删除播客 |
-| GET | `/audio/:id.mp3` | 获取音频文件 |
+| GET | `/api/podcasts/audio/:id` | 获取音频文件 |
 
 ## 目录结构
 
@@ -84,14 +99,13 @@ npm start
 │   │   ├── articleExtractor.js  # 文章提取
 │   │   ├── queue.js             # 任务队列
 │   │   ├── eta.js               # 时间估算
-│   │   ├── llm/                 # LLM 服务
-│   │   └── tts/                 # TTS 服务
+│   │   ├── llm/                 # LLM 服务（Claude CLI）
+│   │   └── tts/                 # TTS 服务（MiniMax / ElevenLabs）
 │   └── utils/
-│       └── podcastStore.js      # 播客存储
 └── data/                  # 数据目录（自动创建）
-    ├── audio/             # 生成的音频
-    ├── scripts/           # 生成的脚本
-    └── podcasts.json      # 播客元数据
+    ├── users/             # 用户数据（按 userId 隔离）
+    ├── db/                # SQLite 数据库
+    └── raw-scripts/       # 原始脚本（调试用）
 ```
 
 ## 配置说明
@@ -100,20 +114,27 @@ npm start
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
-| `GEMINI_API_KEY` | 是 | Google Gemini API 密钥 |
+| `MINIMAX_API_KEY` | 条件必填 | MiniMax TTS API 密钥（使用 MiniMax 时必填） |
+| `ELEVENLABS_API_KEY` | 条件必填 | ElevenLabs API 密钥（使用 ElevenLabs 时必填） |
+| `ANTHROPIC_API_KEY` | 否 | Claude API Key（配合 `CLAUDE_ALLOW_API_KEY=1` 使用） |
+| `CLAUDE_ALLOW_API_KEY` | 否 | 设为 `1` 时允许通过 API Key 调用 Claude CLI |
 | `HTTP_PROXY` | 否 | HTTP 代理地址 |
 | `HTTPS_PROXY` | 否 | HTTPS 代理地址 |
 | `PORT` | 否 | 服务端口，默认 3000 |
 | `MAX_CONCURRENT_TASKS` | 否 | 最大并发任务数，默认 3 |
-| `ENABLE_FILE_CLEANUP` | 否 | 设为 `true` 启用自动清理（1小时过期），默认禁用 |
+| `ELEVENLABS_SINGLE_SHOT_MAX` | 否 | ElevenLabs 单次请求最大字符数，默认 4500 |
+| `ELEVENLABS_CHUNK_CHARS` | 否 | ElevenLabs 分块字符数，默认 1800 |
+| `DISABLE_CLEANUP` | 否 | 设为 `true` 禁用自动清理 |
 
 ### 音色配置
 
-默认音色：
-- Speaker_A（老王）：Achird
-- Speaker_B（小李）：Callirrhoe
+MiniMax 默认音色：
+- Speaker_A（老王）：`Chinese (Mandarin)_Southern_Young_Man`
+- Speaker_B（小李）：`Chinese (Mandarin)_Crisp_Girl`
 
-可在 `src/services/tts/GeminiTTS.js` 中修改 `SPEAKER_VOICE_MAP`。
+可通过 `MINIMAX_VOICE_A` / `MINIMAX_VOICE_B` 环境变量覆盖。
+
+ElevenLabs 默认音色通过 `ELEVENLABS_VOICE_A` / `ELEVENLABS_VOICE_B` 配置。
 
 ## 相关项目
 

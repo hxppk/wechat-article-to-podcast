@@ -72,12 +72,10 @@ app.use('/api/article', articleRouter);
 app.use('/api/status', statusRouter);
 app.use('/api/podcasts', podcastRouter);
 
-// 获取 LLM 和 TTS 提供者信息
+// 打印 LLM 和 TTS 信息（TTS 按任务按需实例化，此处不强制初始化）
 const llm = require('./src/services/llm');
-const tts = require('./src/services/tts');
-
 console.log('LLM Provider:', llm.getName());
-console.log('TTS Provider:', tts.getName());
+console.log('TTS providers available: minimax, elevenlabs (selected per task via ttsProvider param)');
 
 // 健康检查
 app.get('/health', (req, res) => {

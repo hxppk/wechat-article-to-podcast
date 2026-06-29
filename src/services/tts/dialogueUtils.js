@@ -1,3 +1,9 @@
+const { ALLOWED_MARKERS } = require('./prosodyProcessor');
+
+// 预编译白名单正则，只匹配韵律词（如 laughs、sighs 等），其余半角括号原样保留
+const _allowedPattern = Array.from(ALLOWED_MARKERS).join('|');
+const _prosodyRe = new RegExp(`\\((${_allowedPattern})\\)`, 'g');
+
 function normalizeSpeaker(s) {
   const raw = String(s == null ? '' : s).trim();
   if (/^(speaker_?a|老王|小墨|a)$/i.test(raw)) return 'Speaker_A';
@@ -16,7 +22,7 @@ function normalizeSpeaker(s) {
 function convertProsodyForElevenLabs(text) {
   return String(text == null ? '' : text)
     .replace(/<#[^#>]*#>/g, '')
-    .replace(/\(([^)]*)\)/g, '[$1]');
+    .replace(_prosodyRe, '[$1]');
 }
 
 function buildDialogueInputs(dialogues, { voiceA, voiceB }) {
