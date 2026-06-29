@@ -16,9 +16,10 @@ test('TTS 工厂 elevenlabs 分支返回 ElevenLabs provider', () => {
   assert.equal(tts.getName(), 'ElevenLabs (eleven_v3)');
 });
 
-test('queue.getTTSInstance 按名选择实例（默认 minimax）', () => {
-  const queue = require('../src/services/queue');
-  assert.equal(queue.getTTSInstance('elevenlabs').getName(), 'ElevenLabs (eleven_v3)');
-  assert.equal(queue.getTTSInstance('minimax').getName(), 'MiniMax TTS');
-  assert.equal(queue.getTTSInstance().getName(), 'MiniMax TTS');
+test('pipeline.getTTSInstance 按名选择实例（默认 minimax）', () => {
+  // getTTSInstance 已随 AI 流水线搬到本地 worker（src/worker/pipeline.js）
+  const { getTTSInstance } = require('../src/worker/pipeline');
+  assert.equal(getTTSInstance('elevenlabs').getName(), 'ElevenLabs (eleven_v3)');
+  assert.equal(getTTSInstance('minimax').getName(), 'MiniMax TTS');
+  assert.equal(getTTSInstance().getName(), 'MiniMax TTS');
 });

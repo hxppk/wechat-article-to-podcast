@@ -56,7 +56,12 @@ const statusRouter = require('./src/routes/status');
 const podcastRouter = require('./src/routes/podcast');
 const authRouter = require('./src/routes/auth');
 const shareRouter = require('./src/routes/share');
+const workerRouter = require('./src/routes/worker');
 const authMiddleware = require('./src/middleware/auth');
+
+// Worker API（Bearer WORKER_API_TOKEN 认证，在全局用户 auth 之前挂载，
+// 走独立的 token 校验，与用户 JWT 体系隔离）。
+app.use('/api/worker', workerRouter);
 
 // v2.0: 全局 auth 中间件（解析用户身份）
 app.use(authMiddleware);
@@ -72,10 +77,9 @@ app.use('/api/article', articleRouter);
 app.use('/api/status', statusRouter);
 app.use('/api/podcasts', podcastRouter);
 
-// 打印 LLM 和 TTS 信息（TTS 按任务按需实例化，此处不强制初始化）
-const llm = require('./src/services/llm');
-console.log('LLM Provider:', llm.getName());
-console.log('TTS providers available: minimax, elevenlabs (selected per task via ttsProvider param)');
+// 云端为"瘦"服务：零 AI key，不在本进程运行 LLM/TTS。
+// 所有 AI 流水线由本地 worker 认领任务后执行（见 worker.js / src/worker/*）。
+console.log('云端模式：任务由本地 worker 拉取执行（本进程不含 AI key）');
 
 // 健康检查
 app.get('/health', (req, res) => {

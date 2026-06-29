@@ -1,9 +1,11 @@
 /**
- * 文章路由 (v2.0)
+ * 文章路由 (分布式拉模式)
+ * 云端只建任务（pending），AI 流水线由本地 worker 认领执行。
  */
 const express = require('express');
 const router = express.Router();
-const taskQueue = require('../services/queue');
+const { v4: uuid } = require('uuid');
+const tasks = require('../db/tasks');
 const { validateUrl, ValidationError } = require('../services/articleExtractor');
 const quotaMiddleware = require('../middleware/quota');
 const { requireAuth } = require('../middleware/auth');
@@ -12,7 +14,7 @@ const { requireAuth } = require('../middleware/auth');
 
 /**
  * POST /api/article
- * 提交微信文章 URL，启动转换任务
+ * 提交微信文章 URL，创建 pending 任务（不在云端跑 AI）
  * v2.0: 需要登录 + 检查配额
  */
 router.post('/', requireAuth, quotaMiddleware, async (req, res) => {
@@ -31,8 +33,14 @@ router.post('/', requireAuth, quotaMiddleware, async (req, res) => {
     throw error;
   }
 
-  // 创建任务（v1.5: 传入 userId）
-  const taskId = taskQueue.createTask(url, req.userId, { ttsProvider });
+  // 创建任务（pending），等待本地 worker 认领
+  const taskId = uuid();
+  tasks.create({
+    id: taskId,
+    userId: req.userId,
+    sourceUrl: url,
+    ttsProvider: (ttsProvider || 'minimax')
+  });
 
   res.json({
     success: true,

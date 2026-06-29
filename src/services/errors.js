@@ -14,4 +14,13 @@ function isDisplayableError(error) {
   return error.name === 'ValidationError' || error.name === 'ProviderError';
 }
 
-module.exports = { ProviderError, isDisplayableError };
+/**
+ * 根据错误类型解析用户展示消息（可展示错误透传 message，否则用通用文案）
+ * @param {Error} error
+ * @returns {string}
+ */
+function resolveErrorMessage(error) {
+  return isDisplayableError(error) ? error.message : '处理过程中发生错误，请重试';
+}
+
+module.exports = { ProviderError, isDisplayableError, resolveErrorMessage };

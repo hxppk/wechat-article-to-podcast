@@ -5,8 +5,9 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DATA_DIR = path.join(__dirname, '../../data');
-const DB_PATH = path.join(DATA_DIR, 'app.db');
+// 默认数据库位于 data/app.db；测试可通过 APP_DB_PATH 指向临时文件实现隔离。
+const DB_PATH = process.env.APP_DB_PATH || path.join(__dirname, '../../data', 'app.db');
+const DATA_DIR = path.dirname(DB_PATH);
 
 // 确保数据目录存在
 if (!fs.existsSync(DATA_DIR)) {
@@ -16,7 +17,8 @@ if (!fs.existsSync(DATA_DIR)) {
 // 初始化数据库连接
 const db = new Database(DB_PATH);
 
-// 生产并发加固：WAL 模式 + 锁等待
+// 生产并发加固：WAL 模式 + 锁等待。
+// 云端 Web 进程与本地 worker（经 API）及清理任务并发读写，WAL 允许读写并发、降低锁竞争。
 db.pragma('journal_mode = WAL');
 db.pragma('busy_timeout = 5000');
 
@@ -60,6 +62,27 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_podcasts_user_id ON podcasts(user_id);
   CREATE INDEX IF NOT EXISTS idx_podcasts_share_id ON podcasts(share_id);
   CREATE INDEX IF NOT EXISTS idx_podcasts_created_at ON podcasts(created_at);
+
+  -- 分布式拉模式任务队列：云端持久化，本地 worker 经 API 认领/上报。
+  CREATE TABLE IF NOT EXISTS tasks (
+    id TEXT PRIMARY KEY,
+    user_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',  -- pending|leased|completed|failed
+    source_url TEXT NOT NULL,
+    tts_provider TEXT NOT NULL DEFAULT 'minimax',
+    stage TEXT,
+    lease_token TEXT,
+    leased_until INTEGER,
+    worker_id TEXT,
+    title TEXT,
+    account_name TEXT,
+    error TEXT,
+    podcast_id TEXT,
+    created_at INTEGER,
+    updated_at INTEGER
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, created_at);
 `);
 
 // 确保 public 用户存在（用于匿名访问）

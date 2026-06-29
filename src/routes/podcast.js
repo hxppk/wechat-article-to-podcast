@@ -23,11 +23,9 @@ router.get('/', (req, res) => {
 });
 
 /**
- * GET /api/podcasts/audio/:id
- * 获取音频文件流（需要权限校验）
- * 注意：此路由必须在 /:id 之前，否则会被误匹配
+ * 音频文件流处理器（需要权限校验，支持 Range 请求）
  */
-router.get('/audio/:id', (req, res) => {
+function streamAudio(req, res) {
   const { id } = req.params;
   const podcast = podcasts.findById(id, req.userId);
 
@@ -72,7 +70,20 @@ router.get('/audio/:id', (req, res) => {
     const stream = fs.createReadStream(audioPath);
     stream.pipe(res);
   }
-});
+}
+
+/**
+ * GET /api/podcasts/audio/:id
+ * 获取音频文件流（需要权限校验）
+ * 注意：此路由必须在 /:id 之前，否则会被误匹配
+ */
+router.get('/audio/:id', streamAudio);
+
+/**
+ * GET /api/podcasts/:id/audio
+ * 播放音频别名（契约要求的 RESTful 形式，与 /audio/:id 等价）
+ */
+router.get('/:id/audio', streamAudio);
 
 /**
  * GET /api/podcasts/:id

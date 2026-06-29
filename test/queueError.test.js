@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { resolveErrorMessage } = require('../src/services/queue');
-const { ProviderError } = require('../src/services/errors');
+// resolveErrorMessage 已从旧 queue.js 移到 errors.js（分布式重构：云端不再有 AI 队列）
+const { resolveErrorMessage, ProviderError } = require('../src/services/errors');
 
 test('ProviderError 的 message 被展示', () => {
   assert.equal(
