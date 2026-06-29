@@ -4,5 +4,14 @@
 
 podcast.hxppk.cn {
 	encode gzip
-	reverse_proxy app:8080
+	# 本地 worker 上传 mp3（multipart），放宽请求体与超时
+	request_body {
+		max_size 100MB
+	}
+	reverse_proxy app:8080 {
+		transport http {
+			read_timeout 30m
+			write_timeout 30m
+		}
+	}
 }

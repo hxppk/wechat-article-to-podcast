@@ -1,3 +1,5 @@
+# 瘦云端：caddy + app（前端/任务队列/worker拉取API/音频托管）。
+# 无 mihomo/clash 边车（云端零 AI 出站）；AI 全在本地 worker。
 services:
   caddy:
     image: caddy:2-alpine
@@ -19,32 +21,12 @@ services:
     restart: unless-stopped
     env_file: .env
     user: "1000:1000"
-    shm_size: "1gb"
     expose:
       - "8080"
     volumes:
       - /opt/wechat-podcast/data:/app/data
-    depends_on:
-      clash:
-        condition: service_healthy
     networks:
       - web
-      - internal
-
-  clash:
-    image: metacubex/mihomo:Alpine
-    restart: unless-stopped
-    volumes:
-      - ./proxy/config.yaml:/root/.config/mihomo/config.yaml:ro
-    healthcheck:
-      # mihomo:Alpine 自带 busybox wget；探 external-controller
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9090/version"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    networks:
-      - internal
 
 volumes:
   caddy_data:
@@ -52,4 +34,3 @@ volumes:
 
 networks:
   web:
-  internal:
