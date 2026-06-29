@@ -28,6 +28,6 @@ for i in $(seq 1 20); do
 done
 
 echo "==> 健康检查 app（经 caddy 内网）"
-docker compose exec -T app sh -lc 'wget -qO- http://127.0.0.1:8080/health' && echo
+docker compose exec -T app sh -lc 'curl -fsS --max-time 10 http://127.0.0.1:8080/health' && echo || echo "warn: /health 探测未通过（栈可能仍在启动，请稍后手动复查 docker compose ps / logs）"
 
 echo "==> 完成。请继续执行 DEPLOY.md 的"出口 IP 验证"。"

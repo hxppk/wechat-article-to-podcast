@@ -32,6 +32,14 @@ docker compose exec -T app sh -lc 'curl -s https://api.ipify.org; echo'
 ```
 两个 IP 必须不同；前者应为你的静态节点。若相同，检查 `.env` 的 `GLOBAL_AGENT_*` 变量是否生效。
 
+> **⚠ 代理验证局限——必读**
+>
+> 上面的 `curl -x` 命令只能验证 clash 代理路径可达、出口 IP 符合预期，**并不能证明 Node 应用（Claude SDK）的实际出站流量真的经过了代理**。
+>
+> - `global-agent` 只 patch `http.globalAgent` / `https.globalAgent`，对 Node 原生 `fetch`（基于 `undici`）**不生效**。若 Claude SDK 版本使用原生 fetch 发起请求，则即使 `.env` 里 `GLOBAL_AGENT_HTTP_PROXY` 配置齐全，Anthropic API 调用仍可能静默直连，绕过代理。
+> - 因此，**「Claude SDK 确实经静态代理出站」必须在 Claude+ElevenLabs 迁移分支完成后，用一次真实 Claude 调用 + clash 命中 `PROXY` 的日志进行端到端复核**。
+> - 若届时发现 SDK 走原生 fetch 不吃 global-agent，需在 provider 层改用 `undici` 的 `ProxyAgent` / per-request `dispatcher` 显式注入代理，而非依赖全局 patch。
+
 ## 5. 备份
 - 云盘快照（整体）。
 - SQLite 一致性备份：
