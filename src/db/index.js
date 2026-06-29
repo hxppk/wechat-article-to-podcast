@@ -16,6 +16,10 @@ if (!fs.existsSync(DATA_DIR)) {
 // 初始化数据库连接
 const db = new Database(DB_PATH);
 
+// 生产并发加固：WAL 模式 + 锁等待
+db.pragma('journal_mode = WAL');
+db.pragma('busy_timeout = 5000');
+
 // 启用外键约束
 db.pragma('foreign_keys = ON');
 
