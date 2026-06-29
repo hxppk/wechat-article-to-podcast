@@ -28,7 +28,7 @@ const PORT = process.env.PORT || 3000;
 
 // 中间件
 app.use(cors({
-  origin: true,
+  origin: process.env.CORS_ORIGIN || true,
   credentials: true
 }));
 app.use(cookieParser());
