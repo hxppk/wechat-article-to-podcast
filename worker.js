@@ -5,16 +5,9 @@
  * 纯出站，无需暴露端口。所有 AI key（MiniMax/ElevenLabs/Claude CLI 登录态）在本地。
  *
  * 运行：node worker.js  （或 npm run worker / pm2 start worker.js）
+ *
+ * 要求 Node >= 18：直接使用全局 fetch/FormData/Blob/AbortController（见 package.json engines）。
  */
-
-// fetch 兜底（Node 18+ 原生自带；旧版本回退 node-fetch）
-if (!globalThis.fetch) {
-  const nf = require('node-fetch');
-  globalThis.fetch = nf;
-  globalThis.Headers = nf.Headers;
-  globalThis.Request = nf.Request;
-  globalThis.Response = nf.Response;
-}
 
 const fs = require('fs');
 const path = require('path');
@@ -34,7 +27,7 @@ if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
 const os = require('os');
 const { runPipeline } = require('./src/worker/pipeline');
 const { createCloudClient } = require('./src/worker/cloudClient');
-const { resolveErrorMessage } = require('./src/services/errors');
+const { resolveErrorMessage, LeaseLostError } = require('./src/services/errors');
 
 const CLOUD_API_BASE = process.env.CLOUD_API_BASE || 'http://localhost:3000';
 const WORKER_API_TOKEN = process.env.WORKER_API_TOKEN || '';
@@ -57,31 +50,68 @@ async function processOne(task, leaseMs) {
   const { id, sourceUrl, ttsProvider, leaseToken } = task;
   console.log(`[${id}] 认领任务 ${sourceUrl} (tts=${ttsProvider})`);
 
+  // lease 丢失标志：心跳/阶段/result 任一被云端拒（409）即置位，
+  // 之后尽快停止后续阶段与上传，且不再 result/fail（任务已被云端回收）。
+  let leaseLost = false;
+
   const hbEvery = Math.max(1000, Math.floor(leaseMs / 3));
   const heartbeatTimer = setInterval(() => {
     cloud.heartbeat(id, leaseToken).then((ok) => {
-      if (!ok) console.warn(`[${id}] 心跳被拒：lease 可能已被回收`);
+      if (!ok) {
+        leaseLost = true;
+        console.warn(`[${id}] 心跳被拒：lease 已被回收，准备中止`);
+      }
     }).catch((e) => console.warn(`[${id}] 心跳异常:`, e.message));
   }, hbEvery);
 
   let result;
   try {
     result = await runPipeline({ sourceUrl, ttsProvider }, {
-      onStage: (stage) => {
+      isCancelled: () => leaseLost,
+      onStage: async (stage) => {
         console.log(`[${id}] 阶段: ${stage}`);
-        return cloud.setStage(id, leaseToken, stage).catch((e) =>
-          console.warn(`[${id}] 阶段上报失败:`, e.message));
+        try {
+          const ok = await cloud.setStage(id, leaseToken, stage);
+          if (ok === false) {
+            leaseLost = true;
+            return false; // 触发 pipeline 抛 LeaseLostError
+          }
+          return true;
+        } catch (e) {
+          console.warn(`[${id}] 阶段上报失败:`, e.message);
+          return true; // 网络抖动不视为 lease 丢失，靠心跳判定
+        }
       },
     });
-    await cloud.result(id, leaseToken, result);
-    console.log(`[${id}] 完成并已上传`);
+
+    // 上传前再确认 lease 仍在
+    if (leaseLost) {
+      console.warn(`[${id}] lease 已丢失，放弃上传结果`);
+    } else {
+      const r = await cloud.result(id, leaseToken, result);
+      if (r && r.leaseLost) {
+        leaseLost = true;
+        console.warn(`[${id}] result 被拒（409）：lease 已丢失`);
+      } else {
+        console.log(`[${id}] 完成并已上传`);
+      }
+    }
   } catch (err) {
-    const message = resolveErrorMessage(err);
-    console.error(`[${id}] 失败:`, err.message);
-    try {
-      await cloud.fail(id, leaseToken, message);
-    } catch (e) {
-      console.error(`[${id}] fail 上报失败:`, e.message);
+    if (err instanceof LeaseLostError || leaseLost) {
+      leaseLost = true;
+      console.warn(`[${id}] lease 丢失，中止任务（不再 result/fail）`);
+    } else {
+      const message = resolveErrorMessage(err);
+      console.error(`[${id}] 失败:`, err.message);
+      try {
+        const ok = await cloud.fail(id, leaseToken, message);
+        if (ok === false) {
+          leaseLost = true;
+          console.warn(`[${id}] fail 被拒（409）：lease 已丢失`);
+        }
+      } catch (e) {
+        console.error(`[${id}] fail 上报失败:`, e.message);
+      }
     }
   } finally {
     clearInterval(heartbeatTimer);

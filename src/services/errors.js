@@ -1,9 +1,21 @@
-const { ValidationError } = require('./articleExtractor');
+// 引轻量 URL 校验模块取 ValidationError，避免间接加载 puppeteer（articleExtractor）。
+const { ValidationError } = require('../utils/validateWechatUrl');
 
 class ProviderError extends Error {
   constructor(message) {
     super(message);
     this.name = 'ProviderError';
+  }
+}
+
+/**
+ * 租约丢失错误：worker 在心跳/阶段上报被拒（409）时抛出，
+ * 用于中止流水线，且后续不再 result/fail（任务已被云端回收）。
+ */
+class LeaseLostError extends Error {
+  constructor(message = 'lease lost') {
+    super(message);
+    this.name = 'LeaseLostError';
   }
 }
 
@@ -23,4 +35,4 @@ function resolveErrorMessage(error) {
   return isDisplayableError(error) ? error.message : '处理过程中发生错误，请重试';
 }
 
-module.exports = { ProviderError, isDisplayableError, resolveErrorMessage };
+module.exports = { ProviderError, LeaseLostError, isDisplayableError, resolveErrorMessage };

@@ -29,11 +29,12 @@ function toDisplayStatus(task) {
 
 /**
  * GET /api/status/:id
- * 查询任务处理状态
+ * 查询任务处理状态（归属校验：仅本人/同一匿名身份可见，知道 UUID 也无法越权）
  */
 router.get('/:id', (req, res) => {
   const { id } = req.params;
-  const task = tasks.getStatus(id);
+  // req.userId 由全局 auth 中间件注入（登录用户 id 或匿名 'public'）
+  const task = tasks.getStatus(id, req.userId);
 
   if (!task) {
     return res.status(404).json({
@@ -51,7 +52,10 @@ router.get('/:id', (req, res) => {
     title: task.title,
     accountName: task.accountName,
     podcastId: task.podcastId,
-    error: task.error
+    error: task.error,
+    // 旧契约兼容：分布式拉模式下无法精确预估 ETA，保持字段存在但为 null
+    etaSeconds: null,
+    etaText: null
   });
 });
 

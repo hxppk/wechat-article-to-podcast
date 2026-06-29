@@ -58,11 +58,14 @@ function getTTSInstance(name) {
  * 执行完整流水线
  * @param {object} task {sourceUrl, ttsProvider}
  * @param {object} opts
- * @param {(stage:string)=>any} [opts.onStage] - 阶段回调（parsing|generating|synthesizing）
+ * @param {(stage:string)=>any} [opts.onStage] - 阶段回调（parsing|generating|synthesizing）；
+ *   返回 false 视为 lease 丢失，立即抛 LeaseLostError 中止后续阶段与上传。
+ * @param {()=>boolean} [opts.isCancelled] - 取消标志（如心跳被拒）；为真则抛 LeaseLostError。
  * @param {object} [opts.deps] - 可注入依赖（测试用）
  * @returns {Promise<{audioPath,script,summary,durationMs,fileSizeBytes,title,accountName}>}
  */
-async function runPipeline({ sourceUrl, ttsProvider }, { onStage, deps } = {}) {
+async function runPipeline({ sourceUrl, ttsProvider }, { onStage, isCancelled, deps } = {}) {
+  const { LeaseLostError } = require('../services/errors');
   const d = deps || {};
   const extractArticle = d.extractArticle
     || require('../services/articleExtractor').extractArticle;
@@ -71,8 +74,21 @@ async function runPipeline({ sourceUrl, ttsProvider }, { onStage, deps } = {}) {
   const getDuration = d.getAudioDuration || getAudioDuration;
   const workDir = d.workDir || path.join(os.tmpdir(), 'wechat-podcast-worker');
 
+  // 取消检查：心跳被拒等情况下尽快停止，不再烧 Claude/TTS。
+  const ensureAlive = () => {
+    if (typeof isCancelled === 'function' && isCancelled()) {
+      throw new LeaseLostError();
+    }
+  };
+
   const report = async (stage) => {
-    if (typeof onStage === 'function') await onStage(stage);
+    ensureAlive();
+    if (typeof onStage === 'function') {
+      const ok = await onStage(stage);
+      // 阶段上报被云端拒（409）→ lease 丢失，中止流水线。
+      if (ok === false) throw new LeaseLostError();
+    }
+    ensureAlive();
   };
 
   // Stage 1: 解析微信文章
@@ -89,21 +105,28 @@ async function runPipeline({ sourceUrl, ttsProvider }, { onStage, deps } = {}) {
     fs.mkdirSync(workDir, { recursive: true });
   }
   const audioPath = path.join(workDir, `${uuid()}.mp3`);
-  const tts = getTTS(ttsProvider);
-  await tts.synthesize(script.dialogues, audioPath);
 
-  const durationMs = await getDuration(audioPath);
-  const fileSizeBytes = fs.statSync(audioPath).size;
+  // TTS 失败（或取消）时清理临时音频，避免 workDir 残留孤儿文件。
+  try {
+    const tts = getTTS(ttsProvider);
+    await tts.synthesize(script.dialogues, audioPath);
 
-  return {
-    audioPath,
-    script,
-    summary: script.summary || '',
-    durationMs,
-    fileSizeBytes,
-    title: article.title,
-    accountName: article.accountName,
-  };
+    const durationMs = await getDuration(audioPath);
+    const fileSizeBytes = fs.statSync(audioPath).size;
+
+    return {
+      audioPath,
+      script,
+      summary: script.summary || '',
+      durationMs,
+      fileSizeBytes,
+      title: article.title,
+      accountName: article.accountName,
+    };
+  } catch (err) {
+    try { if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath); } catch { /* ignore */ }
+    throw err;
+  }
 }
 
 module.exports = { runPipeline, getTTSInstance, getAudioDuration };

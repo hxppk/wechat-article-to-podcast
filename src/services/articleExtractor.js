@@ -1,29 +1,6 @@
 const puppeteer = require('puppeteer');
-
-/**
- * 验证错误类
- */
-class ValidationError extends Error {
-  constructor(message) {
-    super(message);
-    this.name = 'ValidationError';
-  }
-}
-
-/**
- * 验证微信文章 URL
- */
-function validateUrl(url) {
-  if (!url) {
-    throw new ValidationError('请输入文章链接');
-  }
-
-  if (!url.includes('mp.weixin.qq.com')) {
-    throw new ValidationError('请输入有效的微信公众号文章链接');
-  }
-
-  return true;
-}
+// URL 校验拆到零依赖的轻量模块，云端 article route 只引它（不加载 puppeteer）。
+const { validateUrl, ValidationError } = require('../utils/validateWechatUrl');
 
 // 浏览器实例缓存
 let browserInstance = null;

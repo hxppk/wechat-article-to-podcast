@@ -6,7 +6,9 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuid } = require('uuid');
 const tasks = require('../db/tasks');
-const { validateUrl, ValidationError } = require('../services/articleExtractor');
+// 云端只做纯字符串 URL 校验（零依赖），不加载 articleExtractor / puppeteer。
+const { validateUrl, ValidationError } = require('../utils/validateWechatUrl');
+const usage = require('../db/usage');
 const quotaMiddleware = require('../middleware/quota');
 const { requireAuth } = require('../middleware/auth');
 
@@ -41,6 +43,10 @@ router.post('/', requireAuth, quotaMiddleware, async (req, res) => {
     sourceUrl: url,
     ttsProvider: (ttsProvider || 'minimax')
   });
+
+  // 配额扣减：仅在 URL 校验通过 + 任务创建成功之后扣，
+  // 无效 URL(400) 不扣；worker 失败时由 /api/worker/.../fail 退还。
+  usage.incrementUsage(req.userId);
 
   res.json({
     success: true,

@@ -5,8 +5,9 @@
 const usage = require('../db/usage');
 
 /**
- * 检查配额中间件
- * 用于需要消耗配额的接口（如提交文章）
+ * 检查配额中间件（只校验，不扣减）
+ * 用于需要消耗配额的接口（如提交文章）。
+ * 实际扣减移到路由内 URL 校验通过 + 任务创建成功之后，避免无效请求/无效 URL 也被计数。
  */
 function quotaMiddleware(req, res, next) {
   const { userId, userTier } = req;
@@ -26,10 +27,7 @@ function quotaMiddleware(req, res, next) {
     });
   }
 
-  // 预扣配额（提交即计数，无论成功失败）
-  usage.incrementUsage(userId);
-
-  // 将配额信息附加到请求，供后续使用
+  // 将配额信息附加到请求，供后续使用（扣减由路由负责）
   req.quotaInfo = quotaInfo;
 
   next();

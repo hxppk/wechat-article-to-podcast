@@ -74,6 +74,7 @@ db.exec(`
     lease_token TEXT,
     leased_until INTEGER,
     worker_id TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
     title TEXT,
     account_name TEXT,
     error TEXT,
@@ -83,7 +84,15 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, created_at);
+  CREATE INDEX IF NOT EXISTS idx_tasks_leased_until ON tasks(leased_until);
+  CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
 `);
+
+// 迁移：为旧库补 attempts 列（CREATE TABLE IF NOT EXISTS 不会为既有表加列）。
+const taskCols = db.prepare("PRAGMA table_info(tasks)").all();
+if (!taskCols.some((c) => c.name === 'attempts')) {
+  db.exec("ALTER TABLE tasks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0");
+}
 
 // 确保 public 用户存在（用于匿名访问）
 const publicUser = db.prepare('SELECT id FROM users WHERE id = ?').get('public');

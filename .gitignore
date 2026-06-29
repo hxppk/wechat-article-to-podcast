@@ -13,7 +13,7 @@ data/raw-scripts/
 proxy/config.yaml
 .env.production
 
-# SQLite 运行时文件不进 git
+# SQLite 数据库二进制 + 运行时文件不入库（含 -wal / -shm）
 data/*.db
 data/*.db-wal
 data/*.db-shm

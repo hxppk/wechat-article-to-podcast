@@ -14,7 +14,7 @@ const fs = require('fs');
  * @param {string} [opts.token]   - 默认取 WORKER_API_TOKEN
  * @param {Function} [opts.fetchImpl] - 默认 globalThis.fetch（测试可注入）
  */
-function createCloudClient({ baseUrl, token, fetchImpl } = {}) {
+function createCloudClient({ baseUrl, token, fetchImpl, resultTimeoutMs, resultRetries } = {}) {
   const base = (baseUrl || process.env.CLOUD_API_BASE || '').replace(/\/+$/, '');
   const authToken = token || process.env.WORKER_API_TOKEN || '';
   const doFetch = fetchImpl || globalThis.fetch;
@@ -23,8 +23,27 @@ function createCloudClient({ baseUrl, token, fetchImpl } = {}) {
     throw new Error('未找到 fetch 实现（Node 18+ 自带，或注入 fetchImpl）');
   }
 
+  // result 上传超时与重试（仅对网络错误/超时/5xx 重试；4xx/409 不重试）
+  const RESULT_TIMEOUT_MS = resultTimeoutMs
+    || parseInt(process.env.WORKER_RESULT_TIMEOUT_MS, 10) || 120000;
+  const RESULT_RETRIES = (resultRetries != null ? resultRetries
+    : parseInt(process.env.WORKER_RESULT_RETRIES, 10));
+  const retries = Number.isFinite(RESULT_RETRIES) ? RESULT_RETRIES : 2;
+
   const url = (p) => `${base}${p}`;
   const authHeader = () => ({ Authorization: `Bearer ${authToken}` });
+  const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // 带超时的 fetch（AbortController；旧实现忽略 signal 也无妨）
+  async function fetchWithTimeout(u, options, timeoutMs) {
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), timeoutMs);
+    try {
+      return await doFetch(u, { ...options, signal: ac.signal });
+    } finally {
+      clearTimeout(t);
+    }
+  }
 
   async function postJson(p, body) {
     return doFetch(url(p), {
@@ -71,11 +90,12 @@ function createCloudClient({ baseUrl, token, fetchImpl } = {}) {
   }
 
   /**
-   * 上传结果（multipart：mp3 + 元数据）
+   * 上传结果（multipart：mp3 + 元数据）。带超时与有限重试；
+   * 409 视为 lease 丢失，返回 {leaseLost:true}（调用方不再 fail）。
    * @param {string} id
    * @param {string} leaseToken
    * @param {object} payload {audioPath, script, summary, durationMs, fileSizeBytes, title, accountName}
-   * @returns {Promise<object>} 云端响应 JSON
+   * @returns {Promise<object>} 云端响应 JSON 或 {leaseLost:true}
    */
   async function result(id, leaseToken, payload) {
     const {
@@ -83,25 +103,50 @@ function createCloudClient({ baseUrl, token, fetchImpl } = {}) {
     } = payload;
 
     const buffer = fs.readFileSync(audioPath);
-    const blob = new Blob([buffer], { type: 'audio/mpeg' });
+    let lastErr;
 
-    const form = new FormData();
-    form.append('audio', blob, `${id}.mp3`);
-    form.append('leaseToken', leaseToken || '');
-    form.append('script', JSON.stringify(script || {}));
-    form.append('summary', summary || '');
-    form.append('durationMs', String(durationMs || 0));
-    form.append('fileSizeBytes', String(fileSizeBytes || buffer.length));
-    form.append('title', title || '');
-    form.append('accountName', accountName || '');
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      // FormData/Blob 不可跨请求复用，每次重试都重建
+      const blob = new Blob([buffer], { type: 'audio/mpeg' });
+      const form = new FormData();
+      form.append('audio', blob, `${id}.mp3`);
+      form.append('leaseToken', leaseToken || '');
+      form.append('script', JSON.stringify(script || {}));
+      form.append('summary', summary || '');
+      form.append('durationMs', String(durationMs || 0));
+      form.append('fileSizeBytes', String(fileSizeBytes || buffer.length));
+      form.append('title', title || '');
+      form.append('accountName', accountName || '');
 
-    const res = await doFetch(url(`/api/worker/tasks/${id}/result`), {
-      method: 'POST',
-      headers: { ...authHeader() }, // 不手动设 Content-Type，交给 FormData 生成 boundary
-      body: form,
-    });
-    if (!res.ok) throw new Error(`result 上传失败: HTTP ${res.status}`);
-    return res.json();
+      try {
+        const res = await fetchWithTimeout(url(`/api/worker/tasks/${id}/result`), {
+          method: 'POST',
+          headers: { ...authHeader() }, // 不手动设 Content-Type，交给 FormData 生成 boundary
+          body: form,
+        }, RESULT_TIMEOUT_MS);
+
+        // 409：lease 丢失，不重试、不当作失败上报
+        if (res.status === 409) return { leaseLost: true };
+        if (res.ok) return res.json();
+
+        // 5xx 可重试；其它 4xx 直接抛
+        lastErr = new Error(`result 上传失败: HTTP ${res.status}`);
+        if (res.status >= 500 && attempt < retries) {
+          await delay(500 * (attempt + 1));
+          continue;
+        }
+        throw lastErr;
+      } catch (err) {
+        // 网络错误/超时：重试
+        lastErr = err;
+        if (attempt < retries) {
+          await delay(500 * (attempt + 1));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastErr || new Error('result 上传失败');
   }
 
   /**

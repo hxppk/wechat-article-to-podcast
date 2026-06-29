@@ -65,6 +65,23 @@ function incrementUsage(userId) {
 }
 
 /**
+ * 退还使用量（补偿）
+ * 用于 worker 失败/lease 丢失：扣减不应保留，按当日计数减一（下限 0）。
+ * @param {string} userId - 用户 ID
+ * @returns {number} 新的使用量
+ */
+function refund(userId) {
+  const date = getBeijingDateString();
+  // 仅在当日存在计数且 > 0 时减一，避免出现负数
+  db.prepare(`
+    UPDATE usage SET count = count - 1
+    WHERE user_id = ? AND date = ? AND count > 0
+  `).run(userId, date);
+
+  return getUsageToday(userId);
+}
+
+/**
  * 获取配额限制
  * @param {string} tier - 用户等级
  * @returns {number} 每日配额
@@ -102,6 +119,7 @@ module.exports = {
   getNextResetTime,
   getUsageToday,
   incrementUsage,
+  refund,
   getQuotaLimit,
   checkQuota
 };
