@@ -1,23 +1,18 @@
-const GeminiLLM = require('./GeminiLLM');
+const ClaudeCliLLM = require('./ClaudeCliLLM');
 
-// 当前使用的 LLM 供应商
-// 后续可通过环境变量切换
-const PROVIDER = process.env.LLM_PROVIDER || 'gemini';
+// 当前使用的 LLM 供应商（默认 Claude，通过 LLM_PROVIDER 环境变量切换）
+const PROVIDER = (process.env.LLM_PROVIDER || 'claude').toLowerCase();
 
 let instance = null;
 
 function getLLMProvider() {
   if (instance) return instance;
 
-  switch (PROVIDER.toLowerCase()) {
-    case 'gemini':
+  switch (PROVIDER) {
+    case 'claude':
     default:
-      instance = new GeminiLLM();
+      instance = new ClaudeCliLLM();
       break;
-    // 后续可添加其他供应商
-    // case 'openai':
-    //   instance = new OpenAILLM();
-    //   break;
   }
 
   console.log(`LLM Provider: ${instance.getName()}`);

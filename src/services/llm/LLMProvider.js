@@ -1,4 +1,20 @@
 /**
+ * 从台词中剥离韵律/情绪标记，用于生成纯文本简介(fallbackSummary)。
+ * 剥离：方括号 [xxx]、半角圆括号 (xxx) 韵律标记、<#0.5#> 停顿标记。
+ * 注意只处理半角括号，不误伤中文全角括号（）。
+ * @param {string} text
+ * @returns {string}
+ */
+function stripAudioTags(text) {
+  return String(text == null ? '' : text)
+    .replace(/\[[^\]]*\]/g, '')
+    .replace(/<#[^#>]*#>/g, '')
+    .replace(/\([^)]*\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * LLM 服务抽象基类
  * 所有 LLM 实现都应继承此类
  */
@@ -9,6 +25,17 @@ class LLMProvider {
    */
   getName() {
     throw new Error('子类必须实现 getName 方法');
+  }
+
+  /**
+   * 兜底简介生成（当 LLM 未返回 # Summary 时）。生成前剥离韵律/情绪标记。
+   * @param {Array<{text:string}>} dialogues
+   * @returns {string}
+   */
+  fallbackSummary(dialogues) {
+    const joined = dialogues.slice(0, 5).map(d => d.text).join(' ');
+    const cleaned = stripAudioTags(joined).replace(/[「」""'']/g, '');
+    return cleaned.substring(0, 180);
   }
 
   /**
@@ -27,7 +54,7 @@ class LLMProvider {
    */
   getPrompt(pdfText) {
     return `# Role
-你是由 Google DeepMind 调教的顶尖中文播客制作人，擅长将复杂的输入文本转化为极其自然、充满“人味儿”的深度对谈（Deep Dive）。你的对标节目是 NotebookLM Audio Overview。
+你是顶尖的中文播客制作人，擅长将复杂的输入文本转化为极其自然、充满“人味儿”的深度对谈（Deep Dive）。你的对标节目是 NotebookLM Audio Overview。
 
 # Goal
 阅读输入文本，生成一段 2000-2500 字的播客脚本。
@@ -41,13 +68,13 @@ class LLMProvider {
 
 # Characters (Chemistry is Key)
 * Speaker_A (老王):
-  - 声音/性格: 行业老兵，声音深沉 (对应 TTS: Charon)。
+  - 声音/性格: 行业老兵，声音深沉。
   - 风格: 厌恶说教。喜欢用直觉和类比来解释复杂逻辑。
   - 口头禅: “这么跟你说吧...”、“其实本质上...”、“这就很有意思了”。
   - 任务: 负责输出洞察。当意识到自己说得太晦涩时，会主动说“呃，我是说...”来修正。
 
 * Speaker_B (小李):
-  - 声音/性格: 年轻好奇，反应极快 (对应 TTS: Callirrhoe)。
+  - 声音/性格: 年轻好奇，反应极快。
   - 风格: 听众嘴替。完全不怯场，敢于打断老王。
   - 口头禅: “等等，你是说...？”、“啊？真的假的？”、“那岂不是...”。
   - 任务: 负责提问和捧哏。听到惊人观点时要有强烈的情绪反应。
@@ -167,10 +194,10 @@ ${pdfText}
         let text = match[2].trim();
         let isInterrupt = false;
 
-        // 检测 -- 结尾标记（表示下一句是插嘴）
-        if (text.endsWith('--')) {
+        // 检测行尾 -- 插嘴标记（容错尾随空白）
+        if (/--\s*$/.test(text)) {
           isInterrupt = true;
-          text = text.slice(0, -2).trim();
+          text = text.replace(/--\s*$/, '').trim();
         }
 
         dialogues.push({
@@ -223,9 +250,10 @@ ${pdfText}
         let text = match[2].trim();
         let isInterrupt = false;
 
-        if (text.endsWith('--')) {
+        // 检测行尾 -- 插嘴标记（容错尾随空白）
+        if (/--\s*$/.test(text)) {
           isInterrupt = true;
-          text = text.slice(0, -2).trim();
+          text = text.replace(/--\s*$/, '').trim();
         }
 
         dialogues.push({
@@ -241,3 +269,4 @@ ${pdfText}
 }
 
 module.exports = LLMProvider;
+module.exports.stripAudioTags = stripAudioTags;

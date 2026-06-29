@@ -5,11 +5,12 @@
 const { v4: uuid } = require('uuid');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const { promisify } = require('util');
-const execAsync = promisify(exec);
-const { extractArticle, ValidationError } = require('./articleExtractor');
+const execFileAsync = promisify(execFile);
+const { extractArticle } = require('./articleExtractor');
 const { calculateEta, formatEta } = require('./eta');
+const { isDisplayableError } = require('./errors');
 const podcasts = require('../db/podcasts');
 
 /**
@@ -19,9 +20,12 @@ const podcasts = require('../db/podcasts');
  */
 async function getAudioDuration(audioPath) {
   try {
-    const { stdout } = await execAsync(
-      `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioPath}"`
-    );
+    const { stdout } = await execFileAsync('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      audioPath,
+    ]);
     const seconds = parseFloat(stdout.trim());
     return Math.round(seconds * 1000);
   } catch (err) {
@@ -31,6 +35,15 @@ async function getAudioDuration(audioPath) {
 }
 
 const DATA_DIR = path.join(__dirname, '../../data');
+
+/**
+ * 根据错误类型解析用户展示消息（可展示错误透传 message，否则用通用文案）
+ * @param {Error} error - 错误对象
+ * @returns {string} 用户展示消息
+ */
+function resolveErrorMessage(error) {
+  return isDisplayableError(error) ? error.message : '处理过程中发生错误，请重试';
+}
 
 /**
  * 获取用户的音频目录
@@ -131,7 +144,7 @@ class TaskQueue {
    * @param {string} articleUrl - 微信文章 URL
    * @param {string} userId - 用户 ID（v1.5 新增）
    * @param {Object} options - 可选参数
-   * @param {string} options.ttsProvider - TTS 供应商 (minimax | gemini)
+   * @param {string} options.ttsProvider - TTS 供应商 (minimax | elevenlabs)
    */
   createTask(articleUrl, userId = 'public', options = {}) {
     const task = {
@@ -188,9 +201,7 @@ class TaskQueue {
       await this.processTask(taskId);
     } catch (error) {
       console.error(`任务 ${taskId} 失败:`, error);
-      const errorMessage = error instanceof ValidationError
-        ? error.message
-        : '处理过程中发生错误，请重试';
+      const errorMessage = resolveErrorMessage(error);
       this.updateStatus(taskId, 'failed', errorMessage);
     } finally {
       this.running--;
@@ -268,16 +279,16 @@ class TaskQueue {
 
   /**
    * 按名称创建 TTS Provider 实例
-   * @param {string} name - Provider 名称 (minimax | gemini)
+   * @param {string} name - Provider 名称 (minimax | elevenlabs)
    * @returns {TTSProvider}
    */
   getTTSInstance(name) {
-    const GeminiTTS = require('./tts/GeminiTTS');
     const MiniMaxTTS = require('./tts/MiniMaxTTS');
+    const ElevenLabsTTS = require('./tts/ElevenLabsTTS');
 
     switch ((name || 'minimax').toLowerCase()) {
-      case 'gemini':
-        return new GeminiTTS();
+      case 'elevenlabs':
+        return new ElevenLabsTTS();
       case 'minimax':
       default:
         return new MiniMaxTTS();
@@ -306,3 +317,4 @@ class TaskQueue {
 }
 
 module.exports = new TaskQueue();
+module.exports.resolveErrorMessage = resolveErrorMessage;

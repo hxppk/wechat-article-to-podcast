@@ -6,14 +6,16 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
+    "test": "node --test 'test/**/*.test.js'",
     "db": "node scripts/db-cli.js"
   },
   "keywords": [
     "wechat",
     "podcast",
     "tts",
+    "elevenlabs",
     "ai",
-    "gemini",
+    "claude",
     "text-to-speech"
   ],
   "author": "hxppk",
@@ -27,8 +29,6 @@
   },
   "homepage": "https://github.com/hxppk/wechat-article-to-podcast#readme",
   "dependencies": {
-    "@google/genai": "^1.38.0",
-    "@google/generative-ai": "^0.21.0",
     "axios": "^1.6.0",
     "bcrypt": "^6.0.0",
     "better-sqlite3": "^12.6.2",

@@ -1,3 +1,13 @@
+// fetch 兜底：Node 18+ / 22 原生自带 globalThis.fetch；旧版本回退到 node-fetch。
+// MiniMax / ElevenLabs 都依赖全局 fetch，这里在任何模块加载前确保其可用。
+if (!globalThis.fetch) {
+  const nf = require('node-fetch');
+  globalThis.fetch = nf;
+  globalThis.Headers = nf.Headers;
+  globalThis.Request = nf.Request;
+  globalThis.Response = nf.Response;
+}
+
 require('dotenv').config();
 
 // 配置代理（需要在其他模块加载前设置）

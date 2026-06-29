@@ -1,22 +1,22 @@
-const GeminiTTS = require('./GeminiTTS');
 const MiniMaxTTS = require('./MiniMaxTTS');
+const ElevenLabsTTS = require('./ElevenLabsTTS');
 
 // 当前使用的 TTS 供应商
-// 通过 TTS_PROVIDER 环境变量切换: gemini | minimax
-const PROVIDER = process.env.TTS_PROVIDER || 'gemini';
+// 通过 TTS_PROVIDER 环境变量切换: minimax(默认) | elevenlabs
+const PROVIDER = (process.env.TTS_PROVIDER || 'minimax').toLowerCase();
 
 let instance = null;
 
 function getTTSProvider() {
   if (instance) return instance;
 
-  switch (PROVIDER.toLowerCase()) {
-    case 'minimax':
-      instance = new MiniMaxTTS();
+  switch (PROVIDER) {
+    case 'elevenlabs':
+      instance = new ElevenLabsTTS();
       break;
-    case 'gemini':
+    case 'minimax':
     default:
-      instance = new GeminiTTS();
+      instance = new MiniMaxTTS();
       break;
   }
 
