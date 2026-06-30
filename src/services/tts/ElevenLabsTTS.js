@@ -26,9 +26,15 @@ const OUTPUT_FORMAT = process.env.ELEVENLABS_OUTPUT_FORMAT || 'mp3_44100_128';
 // 升级 ElevenLabs 付费后可用 ELEVENLABS_VOICE_A/B 覆盖为原生中文 library 音色。
 const VOICE_A = process.env.ELEVENLABS_VOICE_A || 'JBFqnCBsd6RMkjVDRZzb';
 const VOICE_B = process.env.ELEVENLABS_VOICE_B || 'EXAVITQu4vr4xnSDxMaL';
-const SINGLE_SHOT_MAX = parsePositiveInt(process.env.ELEVENLABS_SINGLE_SHOT_MAX, 4500);
-const CHUNK_CHARS = parsePositiveInt(process.env.ELEVENLABS_CHUNK_CHARS, 1800);
+// ElevenLabs text-to-dialogue + eleven_v3 单请求建议 ≤2000 字，超了会在流式响应里
+// 提前截断或报校验错。单次/分段都压到 1900（留 buffer：文本含 [emotion] 情绪标签也计字数）。
+const SINGLE_SHOT_MAX = parsePositiveInt(process.env.ELEVENLABS_SINGLE_SHOT_MAX, 1900);
+const CHUNK_CHARS = parsePositiveInt(process.env.ELEVENLABS_CHUNK_CHARS, 1900);
 const STABILITY = process.env.ELEVENLABS_STABILITY;
+// 跨分段一致性：所有分段用同一 seed，让模型随机采样保持一致，减少段间韵律漂移。
+// 配合固定 voice_id（音色身份本就锁定，不会像 Gemini 多段换音色）。可用 ELEVENLABS_SEED 覆盖。
+const SEED = Number.isFinite(parseInt(process.env.ELEVENLABS_SEED, 10))
+  ? parseInt(process.env.ELEVENLABS_SEED, 10) : 777;
 const MAX_CONCURRENT = parsePositiveInt(process.env.ELEVENLABS_MAX_CONCURRENT, 1);
 const RETRY = { maxRetries: 5, baseDelayMs: 4000, maxDelayMs: 60000 };
 
@@ -48,7 +54,7 @@ class ElevenLabsTTS extends TTSProvider {
 
   /** 调用对话端点，返回 mp3 Buffer。长度类错误打 isValidation 标记。 */
   async callDialogue(inputs) {
-    const body = { inputs, model_id: MODEL };
+    const body = { inputs, model_id: MODEL, seed: SEED };
     if (LANGUAGE) body.language_code = LANGUAGE;
     if (STABILITY) body.settings = { stability: parseFloat(STABILITY), use_speaker_boost: true };
     const url = `${API_URL}?output_format=${encodeURIComponent(OUTPUT_FORMAT)}`;
@@ -61,7 +67,12 @@ class ElevenLabsTTS extends TTSProvider {
           body: JSON.stringify(body),
         });
         if (res.status === 401 || res.status === 403) {
-          throw new ProviderError('ElevenLabs 鉴权失败，请检查 API key 与权限范围');
+          const t = await res.text().catch(() => '');
+          // 免费账户额度耗尽/限流也走 401，与真正的 key 失效区分开，便于排查。
+          const transient = /quota|exceed|credit|insufficient|rate.?limit|too.?many|concurrent/i.test(t);
+          throw new ProviderError(transient
+            ? `ElevenLabs 额度不足或被限流（${res.status}）：${t.slice(0, 200)}`
+            : `ElevenLabs 鉴权失败（${res.status}），请检查 API key 与权限：${t.slice(0, 200)}`);
         }
         if (res.status === 400 || res.status === 422) {
           const t = await res.text();
@@ -113,13 +124,17 @@ class ElevenLabsTTS extends TTSProvider {
     const listPath = path.join(tmpDir, 'concat.txt');
     const lines = segPaths.map((p) => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
     fs.writeFileSync(listPath, lines);
+    // 重编码拼接（而非 -c copy）：避免 mp3 直接拼接的非单调 DTS 警告/接缝杂音，
+    // 并写入覆盖全长的 Xing/LAME 头 —— 否则浏览器读不到正确总时长，会“提前结束 + 进度条拖不动”。
     await execFileAsync('ffmpeg', [
-      '-y', '-f', 'concat', '-safe', '0', '-i', listPath, '-c', 'copy', outputPath,
+      '-y', '-f', 'concat', '-safe', '0', '-i', listPath,
+      '-c:a', 'libmp3lame', '-b:a', '128k', '-write_xing', '1', outputPath,
     ]);
   }
 
   async synthesizeChunked(inputs, outputPath, tmpDir) {
     const chunks = chunkInputsByChars(inputs, CHUNK_CHARS);
+    console.log(`[ElevenLabs] 分 ${chunks.length} 段（每段≤${CHUNK_CHARS}字）`);
     if (chunks.length === 1) {
       const buf = await this.callDialogue(chunks[0]);
       fs.writeFileSync(outputPath, buf);
@@ -128,6 +143,7 @@ class ElevenLabsTTS extends TTSProvider {
     const segPaths = [];
     for (let i = 0; i < chunks.length; i++) {
       const buf = await this.callDialogue(chunks[i]);
+      console.log(`[ElevenLabs] 第 ${i + 1}/${chunks.length} 段完成（${(buf.length / 1024).toFixed(0)}KB）`);
       const p = path.join(tmpDir, `seg_${i}.mp3`);
       fs.writeFileSync(p, buf);
       segPaths.push(p);
@@ -167,6 +183,7 @@ class ElevenLabsTTS extends TTSProvider {
       const tmpOut = path.join(tmpDir, 'output.mp3');
       const inputs = buildDialogueInputs(dialogues, { voiceA: VOICE_A, voiceB: VOICE_B });
       const total = totalChars(inputs);
+      console.log(`[ElevenLabs] 对话总字数 ${total}；阈值 ${SINGLE_SHOT_MAX} → ${total <= SINGLE_SHOT_MAX ? '单次' : '分段'}合成`);
 
       if (total <= SINGLE_SHOT_MAX) {
         let buf;
