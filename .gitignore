@@ -9,8 +9,7 @@ data/raw-scripts/
 .DS_Store
 *.log
 
-# 部署：真实 mihomo 配置与生产环境变量（含密钥），不进 git
-proxy/config.yaml
+# 部署：生产环境变量（含密钥），不进 git
 .env.production
 
 # SQLite 数据库二进制 + 运行时文件不入库（含 -wal / -shm）
