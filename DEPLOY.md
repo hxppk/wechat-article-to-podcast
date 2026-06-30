@@ -28,7 +28,7 @@ Caddy 会在 DNS 生效且 80/443 可达后自动签发 Let's Encrypt 证书。
 
 ## 4. 本地 worker 接入
 云端只接收任务、托管音频；实际生成在本地 worker（拉模式，住宅 IP 出站）。在你本地机器按 `LOCAL-WORKER-SETUP.md` 起 pm2 worker，关键配置：
-- `CLOUD_BASE_URL=https://podcast.hxppk.cn`
+- `CLOUD_API_BASE=https://podcast.hxppk.cn`
 - `WORKER_API_TOKEN`（与云端 `.env` 同值）
 
 worker 出站轮询云端任务 → 本地完成抽取 + Claude 脚本 + ElevenLabs 音频 → 上传 mp3 回云端。云端无需对 worker 开放任何入站端口。

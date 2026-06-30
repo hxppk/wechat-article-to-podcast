@@ -12,6 +12,14 @@ data/raw-scripts/
 # 部署：生产环境变量（含密钥），不进 git
 .env.production
 
+# 本地 worker 环境变量（含 ElevenLabs key / WORKER_API_TOKEN），不进 git
+.env.worker
+.env.cloud
+
+# 本地 agent 工作文件，不进 git
+.claude/
+CLAUDE-FABLE-5.md
+
 # SQLite 数据库二进制 + 运行时文件不入库（含 -wal / -shm）
 data/*.db
 data/*.db-wal
