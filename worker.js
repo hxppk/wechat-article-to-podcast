@@ -2,7 +2,7 @@
  * 本地 worker 入口（pm2 常驻）
  *
  * 拉模式：轮询云端认领任务 → 本地全程生成 mp3 → 上传回云端。
- * 纯出站，无需暴露端口。所有 AI key（MiniMax/ElevenLabs/Claude CLI 登录态）在本地。
+ * 纯出站，无需暴露端口。所有 AI key（ElevenLabs/Claude CLI 登录态）在本地。
  *
  * 运行：node worker.js  （或 npm run worker / pm2 start worker.js）
  *
@@ -17,7 +17,7 @@ const envFile = process.env.WORKER_ENV_FILE
   || (fs.existsSync(path.join(__dirname, '.env.worker')) ? '.env.worker' : '.env');
 require('dotenv').config({ path: path.join(__dirname, envFile) });
 
-// 代理（用于访问 ElevenLabs / MiniMax，与云端一致）
+// 代理（用于访问 ElevenLabs，与云端一致）
 if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
   const { bootstrap } = require('global-agent');
   bootstrap();

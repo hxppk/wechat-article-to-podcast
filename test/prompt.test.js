@@ -18,9 +18,8 @@ test('getPrompt 保留输出格式契约', () => {
   assert.ok(p.includes('--'));
 });
 
-test('getPrompt 含圆括号韵律标记说明与停顿格式', () => {
+test('getPrompt 含方括号韵律标记说明（ElevenLabs audio tags）', () => {
   const p = new LLMProvider().getPrompt('文章正文');
-  assert.ok(/\(laughs\)|\(chuckle\)|\(sighs\)/.test(p), '应包含圆括号韵律标记示例');
-  assert.ok(p.includes('<#0.5#>'), '应包含 <#..#> 停顿标记说明');
+  assert.ok(/\[laughs\]|\[chuckle\]|\[sighs\]/.test(p), '应包含方括号韵律标记示例');
   assert.ok(p.includes('文章正文'), '应内嵌输入文本');
 });

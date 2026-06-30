@@ -49,40 +49,36 @@ test('isLikelyTruncated：实际时长远短于预期判为截断', () => {
   assert.equal(isLikelyTruncated(180, 900), false);
 });
 
-test('convertProsodyForElevenLabs 圆括号→方括号并删除停顿标记', () => {
-  assert.equal(convertProsodyForElevenLabs('对！(laughs)太妙了'), '对！[laughs]太妙了');
-  assert.equal(convertProsodyForElevenLabs('哈哈(chuckle)好吧(sighs)'), '哈哈[chuckle]好吧[sighs]');
+test('convertProsodyForElevenLabs 删除停顿标记 <#..#>', () => {
   assert.equal(convertProsodyForElevenLabs('稍等<#0.5#>我想想'), '稍等我想想');
+  assert.equal(convertProsodyForElevenLabs('好的<#1.0#>继续'), '好的继续');
+});
+
+test('convertProsodyForElevenLabs 方括号韵律标记原样保留', () => {
+  // LLM 现在直接输出 ElevenLabs 方括号格式，无需转换
+  assert.equal(convertProsodyForElevenLabs('[laughs]太妙了'), '[laughs]太妙了');
+  assert.equal(convertProsodyForElevenLabs('[sighs]'), '[sighs]');
+  assert.equal(convertProsodyForElevenLabs('[breath]'), '[breath]');
+  assert.equal(convertProsodyForElevenLabs('[emm]'), '[emm]');
+  assert.equal(convertProsodyForElevenLabs('[gasps]'), '[gasps]');
 });
 
 test('convertProsodyForElevenLabs 不影响中文全角括号', () => {
   assert.equal(convertProsodyForElevenLabs('这是（重点）'), '这是（重点）');
 });
 
-test('convertProsodyForElevenLabs 非白名单半角括号保留原样', () => {
-  // 数字、英文缩写、中文拟声词均不在白名单中，不应被转换
+test('convertProsodyForElevenLabs 半角括号内容原样保留', () => {
   assert.equal(convertProsodyForElevenLabs('发布于(2024)年'), '发布于(2024)年');
   assert.equal(convertProsodyForElevenLabs('调用了(API)接口'), '调用了(API)接口');
-  assert.equal(convertProsodyForElevenLabs('他说(咳咳)不好意思'), '他说(咳咳)不好意思');
 });
 
-test('convertProsodyForElevenLabs 全部白名单韵律词均转换', () => {
-  // 验证白名单中各代表词都被转换
-  assert.equal(convertProsodyForElevenLabs('(laughs)'), '[laughs]');
-  assert.equal(convertProsodyForElevenLabs('(sighs)'), '[sighs]');
-  assert.equal(convertProsodyForElevenLabs('(breath)'), '[breath]');
-  assert.equal(convertProsodyForElevenLabs('(emm)'), '[emm]');
-  assert.equal(convertProsodyForElevenLabs('(gasps)'), '[gasps]');
-  assert.equal(convertProsodyForElevenLabs('(groans)'), '[groans]');
-});
-
-test('convertProsodyForElevenLabs 混合场景：白名单转换 + 非白名单保留 + 停顿删除', () => {
-  const input = '见到你(laughs)很高兴，版本(2024)<#0.5#>已更新';
+test('convertProsodyForElevenLabs 混合：方括号保留 + 停顿删除', () => {
+  const input = '见到你[laughs]很高兴<#0.5#>，版本(2024)已更新';
   const expected = '见到你[laughs]很高兴，版本(2024)已更新';
   assert.equal(convertProsodyForElevenLabs(input), expected);
 });
 
-test('buildDialogueInputs 把圆括号韵律标记转成方括号', () => {
-  const inputs = buildDialogueInputs([{ speaker: 'Speaker_A', text: '哈哈(chuckle)好吧' }], VOICES);
-  assert.equal(inputs[0].text, '哈哈[chuckle]好吧');
+test('buildDialogueInputs 方括号韵律标记原样通过', () => {
+  const inputs = buildDialogueInputs([{ speaker: 'Speaker_A', text: '[chuckle]好吧' }], VOICES);
+  assert.equal(inputs[0].text, '[chuckle]好吧');
 });

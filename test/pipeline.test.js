@@ -80,7 +80,7 @@ test('runPipeline 支持 async onStage（等待上报完成）', async () => {
     workDir,
   };
 
-  await runPipeline({ sourceUrl: 'u', ttsProvider: 'minimax' }, {
+  await runPipeline({ sourceUrl: 'u', ttsProvider: 'elevenlabs' }, {
     onStage: async (s) => { await new Promise((r) => setTimeout(r, 1)); reported.push(s); },
     deps,
   });

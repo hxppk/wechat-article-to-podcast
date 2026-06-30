@@ -20,7 +20,7 @@ function reset() {
 
 function newTask() {
   const id = uuid();
-  tasks.create({ id, userId: 'u1', sourceUrl: `https://mp.weixin.qq.com/${id}`, ttsProvider: 'minimax' });
+  tasks.create({ id, userId: 'u1', sourceUrl: `https://mp.weixin.qq.com/${id}`, ttsProvider: 'elevenlabs' });
   return id;
 }
 
@@ -38,7 +38,7 @@ test('claim 认领后状态变 leased 并返回 leaseToken', () => {
   const id = newTask();
   const claimed = tasks.claim({ workerId: 'w1', leaseMs: 120000 });
   assert.equal(claimed.id, id);
-  assert.equal(claimed.ttsProvider, 'minimax');
+  assert.equal(claimed.ttsProvider, 'elevenlabs');
   assert.ok(claimed.leaseToken);
   assert.equal(tasks.getStatus(id, 'u1').status, 'leased');
 });

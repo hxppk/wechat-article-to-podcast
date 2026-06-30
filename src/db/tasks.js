@@ -26,7 +26,7 @@ const MAX_ATTEMPTS = parseInt(process.env.MAX_ATTEMPTS, 10) || 3;
  * @param {string} data.id - 任务 ID（同时作为最终 podcast ID）
  * @param {string} data.userId - 用户 ID
  * @param {string} data.sourceUrl - 微信文章 URL
- * @param {string} [data.ttsProvider] - TTS 供应商，默认 minimax
+ * @param {string} [data.ttsProvider] - TTS 供应商，默认 elevenlabs
  * @returns {{id: string}}
  */
 function create({ id, userId, sourceUrl, ttsProvider }) {
@@ -35,7 +35,7 @@ function create({ id, userId, sourceUrl, ttsProvider }) {
     INSERT INTO tasks (
       id, user_id, status, source_url, tts_provider, attempts, created_at, updated_at
     ) VALUES (?, ?, 'pending', ?, ?, 0, ?, ?)
-  `).run(id, userId, sourceUrl, ttsProvider || 'minimax', now, now);
+  `).run(id, userId, sourceUrl, ttsProvider || 'elevenlabs', now, now);
 
   return { id };
 }

@@ -2,7 +2,7 @@
  * 本地 worker 流水线
  *
  * 从旧 queue.js 的 processTask 搬来主体：抽取文章 → 生成脚本 → 合成音频。
- * 复用现有 ClaudeCliLLM / MiniMaxTTS / ElevenLabsTTS / articleExtractor（不改它们）。
+ * 复用现有 ClaudeCliLLM / ElevenLabsTTS / articleExtractor（不改它们）。
  * 产出临时 mp3 + 元数据，由 worker.js 上传回云端后删除。
  *
  * 依赖可通过 deps 注入以便离线测试（mock extractArticle/llm/tts/ffprobe）。
@@ -37,21 +37,12 @@ async function getAudioDuration(audioPath) {
 }
 
 /**
- * 按名称创建 TTS Provider 实例（minimax | elevenlabs）
- * @param {string} name
+ * 创建 TTS Provider 实例（仅 ElevenLabs）
  * @returns {object}
  */
-function getTTSInstance(name) {
-  const MiniMaxTTS = require('../services/tts/MiniMaxTTS');
+function getTTSInstance() {
   const ElevenLabsTTS = require('../services/tts/ElevenLabsTTS');
-
-  switch ((name || 'minimax').toLowerCase()) {
-    case 'elevenlabs':
-      return new ElevenLabsTTS();
-    case 'minimax':
-    default:
-      return new MiniMaxTTS();
-  }
+  return new ElevenLabsTTS();
 }
 
 /**

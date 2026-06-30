@@ -41,7 +41,7 @@ router.post('/', requireAuth, quotaMiddleware, async (req, res) => {
     id: taskId,
     userId: req.userId,
     sourceUrl: url,
-    ttsProvider: (ttsProvider || 'minimax')
+    ttsProvider: (ttsProvider || 'elevenlabs')
   });
 
   // 配额扣减：仅在 URL 校验通过 + 任务创建成功之后扣，

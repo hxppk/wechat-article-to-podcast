@@ -69,7 +69,7 @@ db.exec(`
     user_id TEXT,
     status TEXT NOT NULL DEFAULT 'pending',  -- pending|leased|completed|failed
     source_url TEXT NOT NULL,
-    tts_provider TEXT NOT NULL DEFAULT 'minimax',
+    tts_provider TEXT NOT NULL DEFAULT 'elevenlabs',
     stage TEXT,
     lease_token TEXT,
     leased_until INTEGER,

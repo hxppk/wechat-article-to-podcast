@@ -36,7 +36,7 @@ function reset() {
 
 function createAndClaim(userId) {
   const id = uuid();
-  tasks.create({ id, userId, sourceUrl: 'https://mp.weixin.qq.com/s/x', ttsProvider: 'minimax' });
+  tasks.create({ id, userId, sourceUrl: 'https://mp.weixin.qq.com/s/x', ttsProvider: 'elevenlabs' });
   const c = tasks.claim({ workerId: 'w', leaseMs: 120000 });
   return { id, leaseToken: c.leaseToken };
 }

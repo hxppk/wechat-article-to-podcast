@@ -1,9 +1,3 @@
-const { ALLOWED_MARKERS } = require('./prosodyProcessor');
-
-// 预编译白名单正则，只匹配韵律词（如 laughs、sighs 等），其余半角括号原样保留
-const _allowedPattern = Array.from(ALLOWED_MARKERS).join('|');
-const _prosodyRe = new RegExp(`\\((${_allowedPattern})\\)`, 'g');
-
 function normalizeSpeaker(s) {
   const raw = String(s == null ? '' : s).trim();
   if (/^(speaker_?a|老王|小墨|a)$/i.test(raw)) return 'Speaker_A';
@@ -12,17 +6,15 @@ function normalizeSpeaker(s) {
 }
 
 /**
- * 把脚本里的韵律标记转换成 ElevenLabs 端能识别的形式：
- *  - 圆括号韵律标记 (laughs) → 方括号 [laughs]
- *  - MiniMax 停顿标记 <#0.5#> 直接删除（ElevenLabs 不认）
- * 仅处理半角圆括号，不影响中文全角括号（）。
+ * 清理不被 ElevenLabs 支持的标记：
+ *  - 停顿标记 <#0.5#> 直接删除
+ * LLM 现在直接输出 ElevenLabs 方括号格式 [laughs]，无需再做圆括号转换。
  * @param {string} text
  * @returns {string}
  */
 function convertProsodyForElevenLabs(text) {
   return String(text == null ? '' : text)
-    .replace(/<#[^#>]*#>/g, '')
-    .replace(_prosodyRe, '[$1]');
+    .replace(/<#[^#>]*#>/g, '');
 }
 
 function buildDialogueInputs(dialogues, { voiceA, voiceB }) {

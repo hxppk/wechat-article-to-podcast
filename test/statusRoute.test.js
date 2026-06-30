@@ -47,7 +47,7 @@ after(async () => {
 
 test('S2 归属：本人可见，他人/匿名拿到 UUID 也被拒(404)', async () => {
   const id = uuid();
-  tasks.create({ id, userId: 'userA', sourceUrl: 'https://mp.weixin.qq.com/s/x', ttsProvider: 'minimax' });
+  tasks.create({ id, userId: 'userA', sourceUrl: 'https://mp.weixin.qq.com/s/x', ttsProvider: 'elevenlabs' });
 
   const own = await getStatus(id, 'userA');
   assert.equal(own.status, 200);

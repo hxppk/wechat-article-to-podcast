@@ -308,19 +308,6 @@ async function handleLogout() {
   }
 }
 
-// TTS Provider 选择
-document.querySelectorAll('.tts-option').forEach(option => {
-  option.addEventListener('click', () => {
-    document.querySelectorAll('.tts-option').forEach(o => o.classList.remove('active'));
-    option.classList.add('active');
-  });
-});
-
-function getSelectedTTSProvider() {
-  const active = document.querySelector('.tts-option.active');
-  return active ? active.dataset.provider : 'minimax';
-}
-
 // 事件监听
 function setupEventListeners() {
   convertBtn.addEventListener('click', handleConvert);
@@ -484,7 +471,7 @@ async function handleConvert() {
     hideError();
     showStatus('正在提交...', '');
 
-    const ttsProvider = getSelectedTTSProvider();
+    const ttsProvider = 'elevenlabs';
     const response = await authFetch('/api/article', {
       method: 'POST',
       body: JSON.stringify({ url, ttsProvider })
