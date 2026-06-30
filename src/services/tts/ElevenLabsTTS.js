@@ -19,10 +19,13 @@ if (process.env.HTTPS_PROXY || process.env.HTTP_PROXY) {
 
 const API_URL = 'https://api.elevenlabs.io/v1/text-to-dialogue';
 const MODEL = process.env.ELEVENLABS_MODEL || 'eleven_v3';
-const LANGUAGE = process.env.ELEVENLABS_LANGUAGE || 'cmn';
+// eleven_v3 不接受 language_code='cmn'；默认留空让模型自动检测中文，需要时用 ELEVENLABS_LANGUAGE 覆盖
+const LANGUAGE = process.env.ELEVENLABS_LANGUAGE || '';
 const OUTPUT_FORMAT = process.env.ELEVENLABS_OUTPUT_FORMAT || 'mp3_44100_128';
-const VOICE_A = process.env.ELEVENLABS_VOICE_A || 'DowyQ68vDpgFYdWVGjc3';
-const VOICE_B = process.env.ELEVENLABS_VOICE_B || 'ByhETIclHirOlWnWKhHc';
+// 默认 premade 音色（免费账户 API 可用；library 共享音色需付费计划）。George=男/Sarah=女；
+// 升级 ElevenLabs 付费后可用 ELEVENLABS_VOICE_A/B 覆盖为原生中文 library 音色。
+const VOICE_A = process.env.ELEVENLABS_VOICE_A || 'JBFqnCBsd6RMkjVDRZzb';
+const VOICE_B = process.env.ELEVENLABS_VOICE_B || 'EXAVITQu4vr4xnSDxMaL';
 const SINGLE_SHOT_MAX = parsePositiveInt(process.env.ELEVENLABS_SINGLE_SHOT_MAX, 4500);
 const CHUNK_CHARS = parsePositiveInt(process.env.ELEVENLABS_CHUNK_CHARS, 1800);
 const STABILITY = process.env.ELEVENLABS_STABILITY;
@@ -45,7 +48,8 @@ class ElevenLabsTTS extends TTSProvider {
 
   /** 调用对话端点，返回 mp3 Buffer。长度类错误打 isValidation 标记。 */
   async callDialogue(inputs) {
-    const body = { inputs, model_id: MODEL, language_code: LANGUAGE };
+    const body = { inputs, model_id: MODEL };
+    if (LANGUAGE) body.language_code = LANGUAGE;
     if (STABILITY) body.settings = { stability: parseFloat(STABILITY), use_speaker_boost: true };
     const url = `${API_URL}?output_format=${encodeURIComponent(OUTPUT_FORMAT)}`;
     let lastError;
