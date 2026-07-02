@@ -13,7 +13,7 @@
 
 1. **Claude Code CLI 已登录订阅**。验证：
    ```bash
-   printf '只回复两个字：在线' | claude -p --model claude-opus-4-8 --output-format text
+   printf '只回复两个字：在线' | claude -p --model claude-fable-5 --output-format text
    ```
    能输出“在线”即可。worker 用本机登录态，不需要也**不要**设 `ANTHROPIC_API_KEY`。
 2. **Node 18+**（已用 v22）、**ffmpeg/ffprobe** 在 PATH（`ffmpeg -version`）。
@@ -36,7 +36,8 @@ cp .env.worker.example .env.worker
 | `WORKER_API_TOKEN` | **与云端 `.env` 里的同一个强随机 token**（鉴权）。生成：`openssl rand -hex 32` |
 | `MINIMAX_API_KEY` / `MINIMAX_VOICE_A` / `MINIMAX_VOICE_B` | MiniMax TTS |
 | `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_A` / `ELEVENLABS_VOICE_B` | ElevenLabs TTS（默认 voice 见 `.env.worker.example`） |
-| `CLAUDE_MODEL` | `claude-opus-4-8` |
+| `CLAUDE_MODEL` | `claude-fable-5`（也可回退 `claude-opus-4-8`） |
+| `CLAUDE_TIMEOUT_MS` | `300000`（fable 5 思考始终开启，长文较慢；代码默认 120000 偏紧） |
 | `WORKER_CONCURRENCY` | 先 `1`（claude/TTS 是长任务，稳了再加） |
 
 > `.env.worker` 已被 `.gitignore` 忽略（含 key，不会进 git）。
