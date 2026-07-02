@@ -30,8 +30,8 @@ function create(data) {
         INSERT INTO podcasts (
           id, user_id, share_id, source_url, title, account_name,
           duration_ms, file_size_bytes, summary, script_preview,
-          audio_path, script_path, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          audio_path, script_path, cover_url, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         data.id,
         data.userId,
@@ -45,6 +45,7 @@ function create(data) {
         data.scriptPreview || '',
         data.audioPath || '',
         data.scriptPath || '',
+        data.coverUrl || '',
         now
       );
 
@@ -174,6 +175,7 @@ function formatPodcast(row) {
     scriptPreview: row.script_preview,
     audioPath: row.audio_path,
     scriptPath: row.script_path,
+    coverUrl: row.cover_url || '',
     createdAt: row.created_at,
     // 兼容旧字段
     sourceFileName: row.title,

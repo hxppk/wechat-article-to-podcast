@@ -161,7 +161,7 @@ router.post('/tasks/:id/stage', express.json(), (req, res) => {
 
 /**
  * POST /api/worker/tasks/:id/result
- * multipart: file `audio`(mp3) + body {script(JSON), summary, durationMs, fileSizeBytes, title, accountName}
+ * multipart: file `audio`(mp3) + body {script(JSON), summary, durationMs, fileSizeBytes, title, accountName, coverUrl}
  *
  * 流程：幂等检查 → MIME/magic 校验 → 写临时文件 → 事务(complete+create) → rename 落最终路径。
  * 失败不留孤儿临时文件；lease 失效返回 409 且不建 podcast。
@@ -169,7 +169,7 @@ router.post('/tasks/:id/stage', express.json(), (req, res) => {
  */
 router.post('/tasks/:id/result', uploadAudio, (req, res) => {
   const { id } = req.params;
-  const { leaseToken, summary, durationMs, title, accountName } = req.body || {};
+  const { leaseToken, summary, durationMs, title, accountName, coverUrl } = req.body || {};
 
   const task = tasks.get(id);
   if (!task) {
@@ -260,6 +260,7 @@ router.post('/tasks/:id/result', uploadAudio, (req, res) => {
         scriptPreview,
         audioPath,
         scriptPath,
+        coverUrl: coverUrl || '',
       }
     );
   } catch (e) {

@@ -49,6 +49,7 @@ db.exec(`
     script_preview TEXT,
     audio_path TEXT,
     script_path TEXT,
+    cover_url TEXT DEFAULT '',
     created_at INTEGER
   );
 
@@ -92,6 +93,12 @@ db.exec(`
 const taskCols = db.prepare("PRAGMA table_info(tasks)").all();
 if (!taskCols.some((c) => c.name === 'attempts')) {
   db.exec("ALTER TABLE tasks ADD COLUMN attempts INTEGER NOT NULL DEFAULT 0");
+}
+
+// 迁移：为旧库补 podcasts.cover_url 列（文章封面图）。
+const podcastCols = db.prepare("PRAGMA table_info(podcasts)").all();
+if (!podcastCols.some((c) => c.name === 'cover_url')) {
+  db.exec("ALTER TABLE podcasts ADD COLUMN cover_url TEXT DEFAULT ''");
 }
 
 // 确保 public 用户存在（用于匿名访问）

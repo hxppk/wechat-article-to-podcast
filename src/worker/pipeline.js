@@ -53,7 +53,7 @@ function getTTSInstance() {
  *   返回 false 视为 lease 丢失，立即抛 LeaseLostError 中止后续阶段与上传。
  * @param {()=>boolean} [opts.isCancelled] - 取消标志（如心跳被拒）；为真则抛 LeaseLostError。
  * @param {object} [opts.deps] - 可注入依赖（测试用）
- * @returns {Promise<{audioPath,script,summary,durationMs,fileSizeBytes,title,accountName}>}
+ * @returns {Promise<{audioPath,script,summary,durationMs,fileSizeBytes,title,accountName,coverUrl}>}
  */
 async function runPipeline({ sourceUrl, ttsProvider }, { onStage, isCancelled, deps } = {}) {
   const { LeaseLostError } = require('../services/errors');
@@ -113,6 +113,7 @@ async function runPipeline({ sourceUrl, ttsProvider }, { onStage, isCancelled, d
       fileSizeBytes,
       title: article.title,
       accountName: article.accountName,
+      coverUrl: article.coverUrl || '',
     };
   } catch (err) {
     try { if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath); } catch { /* ignore */ }

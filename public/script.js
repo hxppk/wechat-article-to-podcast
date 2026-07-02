@@ -43,6 +43,9 @@ const detailProgress = document.getElementById('detail-progress');
 const detailPlayBtn = document.getElementById('detail-play-btn');
 const detailBackwardBtn = document.getElementById('detail-backward-btn');
 const detailForwardBtn = document.getElementById('detail-forward-btn');
+const detailWaveform = document.getElementById('detail-waveform');
+const detailCoverImg = document.getElementById('detail-cover-img');
+const progressPercent = document.getElementById('progress-percent');
 const toastEl = document.getElementById('toast');
 
 // 状态
@@ -340,6 +343,15 @@ function setupEventListeners() {
     playerVisualizer?.classList.remove('playing');
   });
 
+  // 详情页封面加载失败：先回退默认封面，默认也失败则隐藏（露出渐变底）
+  detailCoverImg?.addEventListener('error', () => {
+    if (!detailCoverImg.src.endsWith('/assets/player-cover.png')) {
+      detailCoverImg.src = '/assets/player-cover.png';
+    } else {
+      detailCoverImg.style.display = 'none';
+    }
+  });
+
   // 详情页事件
   detailCloseBtn?.addEventListener('click', closeDetail);
   detailOverlay?.addEventListener('click', closeDetail);
@@ -425,6 +437,8 @@ function updatePlayButtonState(isPlaying) {
   }
   // 更新详情页播放按钮
   updateDetailPlayButtonState(isPlaying);
+  // 波形动画随播放状态启停
+  detailWaveform?.classList.toggle('playing', isPlaying);
 }
 
 // 播放上一曲
@@ -470,6 +484,9 @@ async function handleConvert() {
     updateConvertButtonState(true);
     hideError();
     showStatus('正在提交...', '');
+    progressFill.style.width = '0%';
+    if (progressPercent) progressPercent.textContent = '0%';
+    updateProcessSteps('pending');
 
     const ttsProvider = 'elevenlabs';
     const response = await authFetch('/api/article', {
@@ -498,7 +515,7 @@ async function handleConvert() {
 // 更新转换按钮状态
 function updateConvertButtonState(isLoading) {
   const btnIcon = convertBtn.querySelector('.btn-icon');
-  const btnText = convertBtn.querySelector('span');
+  const btnText = convertBtn.querySelector('.btn-label');
 
   if (isLoading) {
     if (btnIcon) btnIcon.style.display = 'none';
@@ -512,7 +529,7 @@ function updateConvertButtonState(isLoading) {
     }
   } else {
     if (btnIcon) btnIcon.style.display = 'block';
-    if (btnText) btnText.textContent = '开始转换';
+    if (btnText) btnText.textContent = '生成对话播客';
     const spinner = convertBtn.querySelector('.btn-spinner');
     if (spinner) spinner.remove();
   }
@@ -579,7 +596,24 @@ function updateStatusDisplay(data) {
     'synthesizing': 80,
     'completed': 100
   };
-  progressFill.style.width = (progressMap[data.status] || 0) + '%';
+  const pct = progressMap[data.status] || 0;
+  progressFill.style.width = pct + '%';
+  if (progressPercent) progressPercent.textContent = pct + '%';
+  updateProcessSteps(data.status);
+}
+
+// 更新生成步骤清单（解析 → 脚本 → 语音）
+function updateProcessSteps(status) {
+  const order = ['parsing', 'generating', 'synthesizing'];
+  let activeIndex = order.indexOf(status);
+  if (status === 'pending') activeIndex = -1;
+  if (status === 'completed') activeIndex = order.length;
+
+  document.querySelectorAll('.process-step').forEach(step => {
+    const index = order.indexOf(step.dataset.step);
+    step.classList.toggle('done', index < activeIndex || status === 'completed');
+    step.classList.toggle('active', index === activeIndex);
+  });
 }
 
 // 显示/隐藏状态
@@ -619,6 +653,7 @@ async function loadPodcasts() {
     if (!podcasts || podcasts.length === 0) {
       podcastList.innerHTML = `
         <div class="empty-hint">
+          <span class="material-symbols-outlined">podcasts</span>
           <p>暂无播客，快去转换第一篇文章吧！</p>
         </div>
       `;
@@ -626,46 +661,34 @@ async function loadPodcasts() {
     }
 
     podcastList.innerHTML = podcasts.map(podcast => `
-      <div class="podcast-item ${currentPodcastId === podcast.id ? 'playing' : ''}" data-id="${podcast.id}">
-        <div class="podcast-content">
-          <button class="podcast-play-btn" onclick="playPodcast('${podcast.id}')">
-            <svg class="play-icon" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="6 3 20 12 6 21 6 3"></polygon>
-            </svg>
-            <svg class="pause-icon" viewBox="0 0 24 24" fill="currentColor" style="display: none;">
-              <rect x="6" y="4" width="4" height="16"></rect>
-              <rect x="14" y="4" width="4" height="16"></rect>
-            </svg>
-          </button>
-          <div class="podcast-info" onclick="playPodcast('${podcast.id}')">
-            <h3 class="podcast-title">${escapeHtml(podcast.sourceFileName || podcast.title)}</h3>
-            <div class="podcast-meta">
-              <span class="podcast-source">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                  <polyline points="22,6 12,13 2,6"></polyline>
-                </svg>
-                ${podcast.accountName ? escapeHtml(podcast.accountName) : '微信公众号平台'}
-              </span>
-              <span class="meta-dot"></span>
-              <span class="podcast-duration" data-duration="${podcast.durationMs || 0}">${formatDuration(podcast.durationMs, true)}</span>
-              <span class="meta-dot"></span>
-              <span>${formatFileSize(podcast.fileSizeBytes)}</span>
-              <span class="meta-dot"></span>
-              <span>${formatTime(podcast.generatedAt || podcast.createdAt)}</span>
-            </div>
-            <p class="podcast-preview">${escapeHtml(podcast.summary || podcast.scriptPreview || '暂无简介')}</p>
+      <article class="podcast-item ${currentPodcastId === podcast.id ? 'playing' : ''}" data-id="${podcast.id}">
+        <div class="podcast-cover" onclick="playPodcast('${podcast.id}')">
+          ${podcast.coverUrl ? `<img src="${escapeAttr(podcast.coverUrl)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">` : ''}
+        </div>
+        <div class="podcast-info" onclick="playPodcast('${podcast.id}')">
+          <h3 class="podcast-title">${escapeHtml(podcast.sourceFileName || podcast.title)}</h3>
+          <div class="podcast-meta">
+            <span class="podcast-source">${podcast.accountName ? escapeHtml(podcast.accountName) : '微信公众号平台'}</span>
+            <span class="meta-dot"></span>
+            <span class="podcast-duration" data-duration="${podcast.durationMs || 0}">${formatDuration(podcast.durationMs, true)}</span>
+            <span class="meta-dot"></span>
+            <span>${formatTime(podcast.generatedAt || podcast.createdAt)}</span>
           </div>
+          <p class="podcast-preview">${escapeHtml(podcast.summary || podcast.scriptPreview || '暂无简介')}</p>
           <div class="podcast-actions">
-            <button onclick="event.stopPropagation(); downloadPodcast('${podcast.id}', '${escapeHtml(podcast.sourceFileName || 'podcast')}')">下载</button>
-            <button class="delete-btn" onclick="event.stopPropagation(); deletePodcast('${podcast.id}')">删除</button>
+            <button class="card-action" onclick="event.stopPropagation(); downloadPodcast('${podcast.id}', '${escapeHtml(podcast.sourceFileName || 'podcast')}')">
+              <span class="material-symbols-outlined">download</span>下载
+            </button>
+            <button class="card-action delete" onclick="event.stopPropagation(); deletePodcast('${podcast.id}')">
+              <span class="material-symbols-outlined">delete</span>删除
+            </button>
           </div>
         </div>
-        <div class="podcast-mobile-actions">
-          <button onclick="event.stopPropagation(); downloadPodcast('${podcast.id}', '${escapeHtml(podcast.sourceFileName || 'podcast')}')">下载</button>
-          <button class="delete-btn" onclick="event.stopPropagation(); deletePodcast('${podcast.id}')">删除</button>
-        </div>
-      </div>
+        <button class="podcast-play-btn" onclick="playPodcast('${podcast.id}')" aria-label="播放">
+          <span class="material-symbols-outlined icon-fill play-icon">play_arrow</span>
+          <span class="material-symbols-outlined icon-fill pause-icon" style="display: none;">pause</span>
+        </button>
+      </article>
     `).join('');
 
     // 更新正在播放的卡片按钮状态
@@ -769,12 +792,14 @@ function togglePlay() {
 function handleSeek() {
   const time = (progressSlider.value / 100) * audioPlayer.duration;
   audioPlayer.currentTime = time;
+  setSliderFill(progressSlider);
 }
 
 function updateProgress() {
   if (audioPlayer.duration) {
     const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
     progressSlider.value = progress;
+    setSliderFill(progressSlider);
     currentTimeEl.textContent = formatDuration(audioPlayer.currentTime * 1000);
 
     // 同步详情页进度
@@ -890,11 +915,28 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// HTML 属性值转义（在 escapeHtml 基础上补引号）
+function escapeAttr(text) {
+  return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// 同步滑块已播放部分的填充色
+function setSliderFill(slider) {
+  if (slider) slider.style.setProperty('--progress', slider.value);
+}
+
 // ==================== 详情页功能 ====================
 
 // 打开详情页
 function openDetail() {
   if (!currentPodcastData) return;
+
+  // 封面：优先文章封面，缺省用默认封面
+  if (detailCoverImg) {
+    detailCoverImg.style.display = '';
+    detailCoverImg.referrerPolicy = 'no-referrer';
+    detailCoverImg.src = currentPodcastData.coverUrl || '/assets/player-cover.png';
+  }
 
   // 填充详情页内容
   detailTitle.textContent = currentPodcastData.sourceFileName || currentPodcastData.title || '';
@@ -916,7 +958,9 @@ function openDetail() {
   // 同步播放状态
   updateDetailPlayButtonState(!audioPlayer.paused);
 
-  // 同步进度
+  // 构建波形并同步进度
+  buildWaveform();
+  detailWaveform?.classList.toggle('playing', !audioPlayer.paused);
   syncDetailProgress();
 
   // 显示详情页
@@ -959,9 +1003,13 @@ function updateDetailPlayButtonState(isPlaying) {
 function syncDetailProgress() {
   if (audioPlayer.duration) {
     const progress = (audioPlayer.currentTime / audioPlayer.duration) * 100;
-    if (detailProgress) detailProgress.value = progress;
+    if (detailProgress) {
+      detailProgress.value = progress;
+      setSliderFill(detailProgress);
+    }
     if (detailCurrentTime) detailCurrentTime.textContent = formatDuration(audioPlayer.currentTime * 1000);
     if (detailTotalTime) detailTotalTime.textContent = formatDuration(audioPlayer.duration * 1000);
+    updateWaveformPlayed(progress);
   }
 }
 
@@ -969,6 +1017,29 @@ function syncDetailProgress() {
 function handleDetailSeek() {
   const time = (detailProgress.value / 100) * audioPlayer.duration;
   audioPlayer.currentTime = time;
+  setSliderFill(detailProgress);
+}
+
+// 构建播放器装饰波形（仅一次）
+function buildWaveform() {
+  if (!detailWaveform || detailWaveform.childElementCount > 0) return;
+  for (let i = 0; i < 44; i++) {
+    const bar = document.createElement('span');
+    bar.className = 'waveform-bar';
+    const wave = Math.sin(i * 0.55) * 10 + Math.random() * 14;
+    bar.style.height = `${Math.round(Math.max(6, 16 + wave))}px`;
+    detailWaveform.appendChild(bar);
+  }
+}
+
+// 根据进度点亮波形已播放部分
+function updateWaveformPlayed(progressPct) {
+  if (!detailWaveform) return;
+  const bars = detailWaveform.children;
+  const playedCount = Math.round((progressPct / 100) * bars.length);
+  for (let i = 0; i < bars.length; i++) {
+    bars[i].classList.toggle('played', i < playedCount);
+  }
 }
 
 // 快进/快退

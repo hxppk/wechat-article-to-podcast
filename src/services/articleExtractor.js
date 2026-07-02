@@ -27,7 +27,7 @@ async function getBrowser() {
 /**
  * 从微信文章 URL 提取内容
  * @param {string} url - 微信文章 URL
- * @returns {Promise<{title: string, accountName: string, text: string}>}
+ * @returns {Promise<{title: string, accountName: string, text: string, coverUrl: string}>}
  */
 async function extractArticle(url) {
   validateUrl(url);
@@ -134,7 +134,13 @@ async function extractArticle(url) {
         text = paragraphs.join('\n\n');
       }
 
-      return { title, accountName, text };
+      // 提取封面图（og:image 是微信文章标配，msg_cdn_url 兜底）
+      const coverMeta = document.querySelector('meta[property="og:image"]');
+      const coverUrl = coverMeta?.content?.trim()
+        || (typeof window.msg_cdn_url === 'string' ? window.msg_cdn_url.trim() : '')
+        || '';
+
+      return { title, accountName, text, coverUrl };
     });
 
     // 清理文本

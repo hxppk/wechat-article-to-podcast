@@ -32,6 +32,7 @@ router.get('/:shareId', (req, res) => {
       accountName: podcast.accountName,
       durationMs: podcast.durationMs,
       summary: podcast.summary,
+      coverUrl: podcast.coverUrl || '',
       createdAt: podcast.createdAt
     }
   });

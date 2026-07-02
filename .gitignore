@@ -24,3 +24,6 @@ CLAUDE-FABLE-5.md
 data/*.db
 data/*.db-wal
 data/*.db-shm
+
+# Playwright MCP 浏览器缓存
+.playwright-mcp/

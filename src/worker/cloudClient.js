@@ -94,12 +94,12 @@ function createCloudClient({ baseUrl, token, fetchImpl, resultTimeoutMs, resultR
    * 409 视为 lease 丢失，返回 {leaseLost:true}（调用方不再 fail）。
    * @param {string} id
    * @param {string} leaseToken
-   * @param {object} payload {audioPath, script, summary, durationMs, fileSizeBytes, title, accountName}
+   * @param {object} payload {audioPath, script, summary, durationMs, fileSizeBytes, title, accountName, coverUrl}
    * @returns {Promise<object>} 云端响应 JSON 或 {leaseLost:true}
    */
   async function result(id, leaseToken, payload) {
     const {
-      audioPath, script, summary, durationMs, fileSizeBytes, title, accountName,
+      audioPath, script, summary, durationMs, fileSizeBytes, title, accountName, coverUrl,
     } = payload;
 
     const buffer = fs.readFileSync(audioPath);
@@ -117,6 +117,7 @@ function createCloudClient({ baseUrl, token, fetchImpl, resultTimeoutMs, resultR
       form.append('fileSizeBytes', String(fileSizeBytes || buffer.length));
       form.append('title', title || '');
       form.append('accountName', accountName || '');
+      form.append('coverUrl', coverUrl || '');
 
       try {
         const res = await fetchWithTimeout(url(`/api/worker/tasks/${id}/result`), {
