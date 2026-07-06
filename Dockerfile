@@ -27,4 +27,11 @@ USER node
 
 EXPOSE 8080
 ENV PORT=8080
-CMD ["npm", "start"]
+
+# 存活探测（Docker 不会自动重启 unhealthy，仅供 docker ps / 外部自愈观测）
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8080/health || exit 1
+
+# 直跑 node（PID 1）：npm 包一层会吞信号，进程被杀时容器不退出、
+# restart 策略失效（2026-07 线上假活 502 事故根因）
+CMD ["node", "server.js"]

@@ -48,7 +48,15 @@ docker compose up -d --build
 ```
 数据在绑定挂载卷，回滚代码不丢数据。
 
-## 7. 常见问题
+## 7. 线上实际架构（2026-07 现状，与上文 Caddy 方案不同）
+
+当前生产环境（47.253.136.81，1.6GB 内存）**没有跑 Caddy 容器**，由宿主机 nginx 统一反代多个站点：
+
+- 代码在 `/home/admin/wechat-podcast`，`docker-compose.override.yml` 把 app 端口绑到 `127.0.0.1:8080`，nginx `server_name podcast.hxppk.cn` 反代过去（`client_max_body_size 100M`）。
+- override 中还应设置资源限制与内存参数（与仓库 compose 对齐）：`mem_limit: 512m`、`memswap_limit: 512m`、`NODE_OPTIONS=--max-old-space-size=384`、`MAX_AUDIO_UPLOAD_MB=40`。
+- 宿主机 crontab 每分钟跑 `scripts/podcast-selfheal.sh`（连续 3 次 `/health` 失败才 `docker restart`，带 flock/冷却/日志 `/var/log/podcast-selfheal.log`），兜底「进程死但容器假活」场景——2026-07-05 宿主机全局 OOM 曾触发该场景导致 502 两天。
+
+## 8. 常见问题
 - 证书签发失败：确认 DNS 已生效、安全组放行 80/443、`caddy_data` 卷未被清空。
 - worker 拉取返回 401：确认云端 `.env` 与本地 worker 的 `WORKER_API_TOKEN` 完全一致。
 - 上传 mp3 失败/超时：Caddyfile 已放宽 `request_body 100MB` 与 30m 读写超时；确认音频未超 100MB。

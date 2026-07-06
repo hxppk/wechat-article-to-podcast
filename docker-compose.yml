@@ -21,6 +21,11 @@ services:
     restart: unless-stopped
     env_file: .env
     user: "1000:1000"
+    # 内存上限 = mem+swap 上限（容器禁用 swap）：OOM 只在 cgroup 内杀进程→容器退出→restart 拉起，不拖垮整机
+    mem_limit: 512m
+    memswap_limit: 512m
+    environment:
+      NODE_OPTIONS: --max-old-space-size=384
     expose:
       - "8080"
     volumes:

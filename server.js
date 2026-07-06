@@ -41,6 +41,11 @@ const dbDir = path.join(dataDir, 'db');
 // v2.0: 音频通过 /api/podcasts/audio/:id 或 /api/share/:shareId/audio 提供
 // 不再使用静态目录，以支持用户隔离和权限校验
 
+// 健康检查（挂在所有中间件/路由之前：auth 或 DB 故障不应影响存活探测）
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 // API 路由
 const articleRouter = require('./src/routes/article');
 const statusRouter = require('./src/routes/status');
@@ -72,11 +77,6 @@ app.use('/api/podcasts', podcastRouter);
 // 所有 AI 流水线由本地 worker 认领任务后执行（见 worker.js / src/worker/*）。
 console.log('云端模式：任务由本地 worker 拉取执行（本进程不含 AI key）');
 
-// 健康检查
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
 // v2.0: 数据清理任务（按用户等级）
 // 默认启用，设置 DISABLE_CLEANUP=true 禁用
 if (process.env.DISABLE_CLEANUP !== 'true') {
@@ -88,6 +88,23 @@ if (process.env.DISABLE_CLEANUP !== 'true') {
 }
 
 // 启动服务
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`微信文章转播客服务已启动: http://localhost:${PORT}`);
 });
+
+// 优雅退出：容器 PID 1 直跑 node，必须自行处理信号——
+// 停止接收新连接、放行在途请求、关 DB，10 秒兜底强退。
+function shutdown(signal) {
+  console.log(`收到 ${signal}，正在优雅退出...`);
+  const forceTimer = setTimeout(() => {
+    console.error('优雅退出超时，强制退出');
+    process.exit(1);
+  }, 10000);
+  forceTimer.unref();
+  server.close(() => {
+    try { require('./src/db/index').close(); } catch { /* DB 可能未初始化 */ }
+    process.exit(0);
+  });
+  server.closeIdleConnections();
+}
+['SIGTERM', 'SIGINT'].forEach((sig) => process.on(sig, () => shutdown(sig)));
